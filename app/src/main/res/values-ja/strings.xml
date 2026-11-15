@@ -44,7 +44,7 @@
     <string name="cd_toggle_channel_swap">チャンネルスワップ切替</string>
 
     <!-- Engine Hero Card -->
-    <string name="hero_status_running">PEQ 稼働中 (排他ループバック)</string>
+    <string name="hero_status_running">PEQ 稼働中</string>
     <string name="hero_status_paused_rule">出力機器ルールにより EQ OFF</string>
     <string name="hero_status_starting">エンジン起動中…</string>
     <string name="hero_status_stopped">PEQ エンジン停止中</string>
@@ -59,11 +59,14 @@
 
     <!-- Frequency Response Graph -->
     <string name="freq_response_title">周波数特性</string>
+    <string name="freq_subtitle_common">%1$dバンド · %2$+.1f dB</string>
+    <string name="freq_subtitle_independent">%1$dバンド · L/R独立</string>
     <string name="badge_bypass">BYPASS</string>
     <string name="badge_peak_db">Peak %1$+.1f dB</string>
     <string name="legend_total_l">Total L</string>
     <string name="legend_total_r">Total R</string>
     <string name="legend_common_lr">共通 L+R</string>
+    <string name="legend_common_linked">共通 (L=R)</string>
     <string name="freq_peak_warning_tap">ピークが +%1$.1f dB あります（タップで自動補正）</string>
 
     <!-- PEQ Editor -->

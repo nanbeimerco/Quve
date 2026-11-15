@@ -8,8 +8,11 @@ import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.os.Binder
+import android.os.DeadObjectException
 import android.os.IBinder
 import android.os.Process
+import android.os.RemoteException
 import android.util.Log
 import androidx.annotation.StringRes
 import com.superglobalpeq.app.BuildConfig
@@ -36,6 +39,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +53,7 @@ import rikka.shizuku.Shizuku
 import rikka.shizuku.Shizuku.UserServiceArgs
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 enum class ShizukuStatus {
@@ -98,11 +103,15 @@ data class AppUiState(
 object PeqEngineManager {
     private const val TAG = "PeqEngineManager"
     private const val SHIZUKU_REQ_CODE = 2001
-    private const val USER_SERVICE_PROTOCOL_VERSION = 3
+    private const val USER_SERVICE_PROTOCOL_VERSION = 4
     private const val SHELL_PACKAGE = "com.android.shell"
 
     private val initialized = AtomicBoolean(false)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val ipcDispatcher = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "quve-peq-ipc").apply { isDaemon = true }
+    }.asCoroutineDispatcher()
+    private val clientDeathToken: IBinder = Binder()
 
     private lateinit var appContext: Context
     private lateinit var repo: PeqPreferencesRepository
@@ -111,9 +120,16 @@ object PeqEngineManager {
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
+    @Volatile
     private var remoteService: IAudioLoopbackService? = null
+    @Volatile
     private var bindingInProgress = false
+    @Volatile
     private var pendingStartAfterBind = false
+    private val pendingSyncRestart = AtomicBoolean(false)
+    private val syncScheduled = AtomicBoolean(false)
+    private val configUpdateDirty = AtomicBoolean(false)
+    private val configUpdateScheduled = AtomicBoolean(false)
     private var meterJob: Job? = null
     private var lastAutoAppliedKey: String? = null
 
@@ -155,9 +171,19 @@ object PeqEngineManager {
     private val userServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             bindingInProgress = false
-            remoteService = IAudioLoopbackService.Stub.asInterface(service)
+            val stub = IAudioLoopbackService.Stub.asInterface(service)
+            remoteService = stub
             Log.i(TAG, "Shizuku UserService connected")
             _uiState.update { it.copy(serviceBound = true, statusBanner = null) }
+            if (stub != null) {
+                scope.launch(ipcDispatcher) {
+                    try {
+                        stub.registerClientToken(clientDeathToken)
+                    } catch (t: Throwable) {
+                        handleRemoteServiceError(t, stub)
+                    }
+                }
+            }
             if (pendingStartAfterBind || (_uiState.value.masterPowerOn && !_uiState.value.pausedByDeviceRule)) {
                 pendingStartAfterBind = false
                 syncEngineWithState(restartLoopback = true)
@@ -174,6 +200,10 @@ object PeqEngineManager {
                     telemetry = it.telemetry.copy(isRunning = false)
                 )
             }
+            if (_uiState.value.masterPowerOn && !_uiState.value.pausedByDeviceRule) {
+                pendingStartAfterBind = true
+            }
+            refreshShizukuStatus()
         }
     }
 
@@ -288,9 +318,12 @@ object PeqEngineManager {
     fun startTelemetryPolling(active: Boolean) {
         if (active) {
             if (meterJob?.isActive == true) return
-            meterJob = scope.launch(Dispatchers.IO) {
+            meterJob = scope.launch(ipcDispatcher) {
                 while (isActive) {
-                    pollTelemetryOnce()
+                    val svc = remoteService
+                    if (svc != null) {
+                        pollTelemetryFromService(svc)
+                    }
                     delay(200L)
                 }
             }
@@ -300,8 +333,7 @@ object PeqEngineManager {
         }
     }
 
-    private fun pollTelemetryOnce() {
-        val svc = remoteService ?: return
+    private fun pollTelemetryFromService(svc: IAudioLoopbackService) {
         try {
             val obj = JSONObject(svc.statusJson)
             val err = if (obj.isNull("error")) null else obj.optString("error").takeIf { it.isNotEmpty() }
@@ -318,7 +350,37 @@ object PeqEngineManager {
                 lastError = err
             )
             _uiState.update { it.copy(telemetry = telemetry) }
-        } catch (_: Throwable) {
+        } catch (t: Throwable) {
+            handleRemoteServiceError(t, svc)
+        }
+    }
+
+    private fun handleRemoteServiceError(t: Throwable, failedSvc: IAudioLoopbackService) {
+        if (t !is DeadObjectException && t !is RemoteException) return
+        Log.w(TAG, "Remote UserService binder error; resetting binding", t)
+        if (remoteService === failedSvc) {
+            remoteService = null
+            bindingInProgress = false
+        }
+        _uiState.update {
+            it.copy(
+                serviceBound = false,
+                telemetry = it.telemetry.copy(
+                    isRunning = false,
+                    inPeakDbfs = -120.0,
+                    inRmsDbfs = -120.0,
+                    outPeakDbfs = -120.0,
+                    outRmsDbfs = -120.0,
+                    lastError = t.message ?: t.javaClass.simpleName
+                )
+            )
+        }
+        scope.launch(Dispatchers.Main.immediate) {
+            val state = _uiState.value
+            if (state.masterPowerOn && !state.pausedByDeviceRule) {
+                pendingStartAfterBind = true
+            }
+            refreshShizukuStatus()
         }
     }
 
@@ -442,13 +504,6 @@ object PeqEngineManager {
     private fun syncEngineWithState(restartLoopback: Boolean) {
         val state = _uiState.value
         val activePreset = state.activePreset
-        val config = ActiveDspConfig(
-            bypass = state.pausedByDeviceRule,
-            channelSwap = activePreset.channelSwap,
-            swapPosition = activePreset.swapPosition,
-            preset = activePreset
-        )
-
         val shouldRunLoopback = state.masterPowerOn && !state.pausedByDeviceRule
 
         if (shouldRunLoopback) {
@@ -460,76 +515,121 @@ object PeqEngineManager {
                 title = localizedStr(R.string.notif_running_title, displayPresetName(activePreset)),
                 text = "$deviceLabel$swapLabel"
             )
+        } else if (state.masterPowerOn && state.pausedByDeviceRule) {
+            val deviceLabel = state.activeDevice?.displayName
+                ?: localizedStr(R.string.connected_device_label)
+            PeqForegroundService.startOrUpdate(
+                appContext,
+                title = localizedStr(R.string.notif_paused_title),
+                text = localizedStr(R.string.notif_paused_text, deviceLabel)
+            )
+        } else {
+            PeqForegroundService.stop(appContext)
+        }
 
+        if (restartLoopback) {
+            pendingSyncRestart.set(true)
+        }
+        if (!syncScheduled.compareAndSet(false, true)) return
+
+        scope.launch(ipcDispatcher) {
+            syncScheduled.set(false)
+            val restartNow = pendingSyncRestart.getAndSet(false)
+            executeEngineSync(restartNow)
+        }
+    }
+
+    private suspend fun executeEngineSync(restartNow: Boolean) {
+        val state = _uiState.value
+        val activePreset = state.activePreset
+        val shouldRunLoopback = state.masterPowerOn && !state.pausedByDeviceRule
+
+        if (shouldRunLoopback) {
             val svc = remoteService
             if (svc == null) {
+                if (restartNow) {
+                    pendingSyncRestart.set(true)
+                }
                 pendingStartAfterBind = true
-                bindUserService()
+                withContext(Dispatchers.Main.immediate) {
+                    bindUserService()
+                }
                 return
             }
 
-            scope.launch(Dispatchers.IO) {
-                try {
-                    val runningNow = try {
-                        JSONObject(svc.statusJson).optBoolean("running", false)
-                    } catch (_: Throwable) {
-                        false
-                    }
-                    if (!runningNow || restartLoopback) {
-                        val excludedUids = resolveExcludedUids(state.bypassedPackages)
-                        val ok = svc.startLoopback(Process.myUid(), excludedUids, config.toJsonString())
-                        if (!ok) {
-                            pollTelemetryOnce()
-                        }
-                    } else {
-                        svc.updateDspConfig(config.toJsonString())
-                    }
-                    pollTelemetryOnce()
+            val config = ActiveDspConfig(
+                bypass = false,
+                channelSwap = activePreset.channelSwap,
+                swapPosition = activePreset.swapPosition,
+                preset = activePreset
+            )
+
+            try {
+                val runningNow = try {
+                    JSONObject(svc.statusJson).optBoolean("running", false)
                 } catch (t: Throwable) {
+                    if (t is DeadObjectException || t is RemoteException) {
+                        throw t
+                    }
+                    false
+                }
+                if (!runningNow || restartNow) {
+                    val excludedUids = resolveExcludedUids(state.bypassedPackages)
+                    svc.startLoopback(Process.myUid(), excludedUids, config.toJsonString())
+                } else {
+                    svc.updateDspConfig(config.toJsonString())
+                }
+                pollTelemetryFromService(svc)
+            } catch (t: Throwable) {
+                handleRemoteServiceError(t, svc)
+                if (t !is DeadObjectException && t !is RemoteException) {
                     Log.e(TAG, "syncEngineWithState IO error", t)
                 }
             }
         } else {
-            if (state.masterPowerOn && state.pausedByDeviceRule) {
-                val deviceLabel = state.activeDevice?.displayName
-                    ?: localizedStr(R.string.connected_device_label)
-                PeqForegroundService.startOrUpdate(
-                    appContext,
-                    title = localizedStr(R.string.notif_paused_title),
-                    text = localizedStr(R.string.notif_paused_text, deviceLabel)
-                )
-            } else {
-                PeqForegroundService.stop(appContext)
-            }
-
+            pendingStartAfterBind = false
             val svc = remoteService
             if (svc != null) {
-                scope.launch(Dispatchers.IO) {
-                    try {
-                        svc.stopLoopback()
-                        pollTelemetryOnce()
-                    } catch (_: Throwable) {
-                    }
+                try {
+                    svc.stopLoopback()
+                } catch (t: Throwable) {
+                    handleRemoteServiceError(t, svc)
                 }
+            }
+            _uiState.update {
+                it.copy(
+                    telemetry = it.telemetry.copy(
+                        isRunning = false,
+                        inPeakDbfs = -120.0,
+                        inRmsDbfs = -120.0,
+                        outPeakDbfs = -120.0,
+                        outRmsDbfs = -120.0
+                    )
+                )
             }
         }
     }
 
     private fun pushLiveDspConfigOnly() {
-        val state = _uiState.value
-        val svc = remoteService ?: return
-        if (!state.masterPowerOn || state.pausedByDeviceRule) return
-        val preset = state.activePreset
-        val configJson = ActiveDspConfig(
-            bypass = false,
-            channelSwap = preset.channelSwap,
-            swapPosition = preset.swapPosition,
-            preset = preset
-        ).toJsonString()
-        scope.launch(Dispatchers.IO) {
+        configUpdateDirty.set(true)
+        if (!configUpdateScheduled.compareAndSet(false, true)) return
+        scope.launch(ipcDispatcher) {
+            configUpdateScheduled.set(false)
+            if (!configUpdateDirty.getAndSet(false)) return@launch
+            val state = _uiState.value
+            val svc = remoteService ?: return@launch
+            if (!state.masterPowerOn || state.pausedByDeviceRule) return@launch
+            val preset = state.activePreset
+            val configJson = ActiveDspConfig(
+                bypass = false,
+                channelSwap = preset.channelSwap,
+                swapPosition = preset.swapPosition,
+                preset = preset
+            ).toJsonString()
             try {
                 svc.updateDspConfig(configJson)
-            } catch (_: Throwable) {
+            } catch (t: Throwable) {
+                handleRemoteServiceError(t, svc)
             }
         }
     }

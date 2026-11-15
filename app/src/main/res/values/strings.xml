@@ -44,7 +44,7 @@
     <string name="cd_toggle_channel_swap">Toggle Channel Swap</string>
 
     <!-- Engine Hero Card -->
-    <string name="hero_status_running">PEQ Active (Exclusive Loopback)</string>
+    <string name="hero_status_running">PEQ Active</string>
     <string name="hero_status_paused_rule">EQ OFF by Device Rule</string>
     <string name="hero_status_starting">Starting Engine…</string>
     <string name="hero_status_stopped">PEQ Engine Stopped</string>
@@ -59,11 +59,14 @@
 
     <!-- Frequency Response Graph -->
     <string name="freq_response_title">Freq. Response</string>
+    <string name="freq_subtitle_common">%1$d bands · %2$+.1f dB</string>
+    <string name="freq_subtitle_independent">%1$d bands · L/R Indep.</string>
     <string name="badge_bypass">Bypass</string>
     <string name="badge_peak_db">Peak %1$+.1f dB</string>
     <string name="legend_total_l">Total L</string>
     <string name="legend_total_r">Total R</string>
     <string name="legend_common_lr">Common L+R</string>
+    <string name="legend_common_linked">Common (L=R)</string>
     <string name="freq_peak_warning_tap">Peak reaches +%1$.1f dB (Tap to auto-balance)</string>
 
     <!-- PEQ Editor -->

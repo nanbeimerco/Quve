@@ -8,11 +8,22 @@ import com.superglobalpeq.app.model.ActiveDspConfig
 import com.superglobalpeq.app.model.EqPreset
 import com.superglobalpeq.app.model.FilterType
 import com.superglobalpeq.app.model.PeqBand
+import com.superglobalpeq.app.model.PeqChannelTarget
 import com.superglobalpeq.app.model.SwapPosition
 import com.superglobalpeq.app.model.mergeExcludedUids
+import com.superglobalpeq.app.service.IAudioLoopbackService
+import com.superglobalpeq.app.service.extractProcCmdlineProcessName
+import com.superglobalpeq.app.service.isStaleSiblingPeqServiceProcess
+import com.superglobalpeq.app.service.parseProcRealUid
+import com.superglobalpeq.app.ui.components.GraphSeries
+import com.superglobalpeq.app.ui.components.formatInspectFrequency
+import com.superglobalpeq.app.ui.components.hasIndependentChannelEq
+import com.superglobalpeq.app.ui.components.interpolateInspectReadout
+import com.superglobalpeq.app.ui.components.visibleSeriesOrder
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
@@ -198,6 +209,81 @@ class BiquadAndApoTest {
         assertEquals(setOf("com.google.android.youtube", "com.spotify.music"), parsed)
         assertTrue(PeqPreferencesRepository.parseBypassedPackagesJson(null).isEmpty())
         assertTrue(PeqPreferencesRepository.parseBypassedPackagesJson("not-json").isEmpty())
+    }
+
+    @Test
+    fun graphSeriesOrderHidesTotalLeftRightWhenCommonOnly() {
+        val commonOnly = EqPreset(
+            id = "c1",
+            name = "Common Only",
+            commonPreampDb = -3.0,
+            commonBands = listOf(PeqBand(enabled = true, frequencyHz = 100.0, gainDb = 3.0)),
+            leftBands = listOf(PeqBand(enabled = false, frequencyHz = 200.0, gainDb = -2.0)),
+            rightPreampDb = 0.0,
+        )
+        assertFalse(hasIndependentChannelEq(commonOnly))
+        assertEquals(
+            listOf(GraphSeries.COMMON),
+            visibleSeriesOrder(hasIndependentLR = false, editingTarget = PeqChannelTarget.COMMON),
+        )
+        assertEquals(
+            listOf(GraphSeries.COMMON),
+            visibleSeriesOrder(hasIndependentLR = false, editingTarget = PeqChannelTarget.LEFT),
+        )
+
+        val dual = commonOnly.copy(leftPreampDb = -1.0)
+        assertTrue(hasIndependentChannelEq(dual))
+        assertEquals(
+            listOf(GraphSeries.COMMON, GraphSeries.RIGHT, GraphSeries.LEFT),
+            visibleSeriesOrder(hasIndependentLR = true, editingTarget = PeqChannelTarget.LEFT),
+        )
+        assertEquals(
+            listOf(GraphSeries.COMMON, GraphSeries.LEFT, GraphSeries.RIGHT),
+            visibleSeriesOrder(hasIndependentLR = true, editingTarget = PeqChannelTarget.RIGHT),
+        )
+        assertEquals(
+            listOf(GraphSeries.LEFT, GraphSeries.RIGHT, GraphSeries.COMMON),
+            visibleSeriesOrder(hasIndependentLR = true, editingTarget = PeqChannelTarget.COMMON),
+        )
+    }
+
+    @Test
+    fun inspectReadoutInterpolatesLogFrequencyAndFormatsCleanly() {
+        val preset = EqPreset(id = "f1", name = "Flat", commonPreampDb = -4.5)
+        val curves = FrequencyResponseCalculator.calculate(preset)
+        val mid = interpolateInspectReadout(curves, 0.5f)!!
+        assertEquals(632.45, mid.freqHz, 1.0)
+        assertEquals(-4.5f, mid.commonDb, 1e-3f)
+        assertEquals("63.4 Hz", formatInspectFrequency(63.4))
+        assertEquals("520 Hz", formatInspectFrequency(520.0))
+        assertEquals("1.24 kHz", formatInspectFrequency(1240.0))
+        assertEquals("12.5 kHz", formatInspectFrequency(12500.0))
+    }
+
+    @Test
+    fun aidlDestroyTransactionCodeMatchesShizukuUserServiceProtocol() {
+        val field = IAudioLoopbackService.Stub::class.java.getDeclaredField("TRANSACTION_destroy")
+        field.isAccessible = true
+        assertEquals(16777115, field.getInt(null))
+    }
+
+    @Test
+    fun staleSiblingProcessMatchingTargetsOnlyOwnPeqServiceSuffixUnderSameUid() {
+        val rawCmdline = "com.superglobalpeq.app:peq_dsp\u0000\u0000--extra\u0000".toByteArray()
+        assertEquals("com.superglobalpeq.app:peq_dsp", extractProcCmdlineProcessName(rawCmdline))
+        assertNull(extractProcCmdlineProcessName(byteArrayOf(0, 0, 0)))
+
+        val uid = parseProcRealUid("Name:\tmain\nUid:\t2000\t2000\t2000\t2000\n")
+        assertEquals(2000, uid)
+        assertNull(parseProcRealUid("Name:\tmain\nPid:\t123\n"))
+
+        val expected = "com.superglobalpeq.app:peq_dsp"
+        assertTrue(isStaleSiblingPeqServiceProcess(1001, 2002, 2000, 2000, expected, expected))
+        assertFalse(isStaleSiblingPeqServiceProcess(2002, 2002, 2000, 2000, expected, expected))
+        assertFalse(isStaleSiblingPeqServiceProcess(1001, 2002, 1000, 2000, expected, expected))
+        assertFalse(isStaleSiblingPeqServiceProcess(1001, 2002, 2000, 2000, "shizuku_server", expected))
+        assertFalse(isStaleSiblingPeqServiceProcess(1001, 2002, 2000, 2000, "com.superglobalpeq.app", expected))
+        assertFalse(isStaleSiblingPeqServiceProcess(1001, 2002, 2000, 2000, "shizuku_server", "shizuku_server"))
     }
 
     private fun createSampleDualChannelPreset(): EqPreset =

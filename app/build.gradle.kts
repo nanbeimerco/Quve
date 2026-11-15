@@ -11,8 +11,8 @@ android {
         applicationId = "com.superglobalpeq.app"
         minSdk = 33
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -65,4 +65,18 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
+}
+
+val releaseVersionName = android.defaultConfig.versionName ?: "1.0.0"
+
+val copyReleaseApk by tasks.registering(Copy::class) {
+    from(layout.buildDirectory.dir("outputs/apk/release")) {
+        include("app-release.apk")
+        rename { "Quve-v$releaseVersionName-release.apk" }
+    }
+    into(rootProject.layout.projectDirectory.dir("Release_APK/v$releaseVersionName"))
+}
+
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    finalizedBy(copyReleaseApk)
 }

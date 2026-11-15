@@ -11,6 +11,7 @@ import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.os.Build
+import android.os.IBinder
 import android.os.Looper
 import android.os.Process
 import android.util.Log
@@ -19,12 +20,55 @@ import com.superglobalpeq.app.model.ActiveDspConfig
 import com.superglobalpeq.app.model.EqPreset
 import com.superglobalpeq.app.model.mergeExcludedUids
 import org.json.JSONObject
+import java.io.File
+import java.io.FileInputStream
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 import kotlin.math.log10
 import kotlin.math.sqrt
 import kotlin.system.exitProcess
+
+internal const val PEQ_USER_SERVICE_PROCESS_SUFFIX = ":peq_dsp"
+
+internal fun extractProcCmdlineProcessName(
+    rawCmdlineBytes: ByteArray,
+    length: Int = rawCmdlineBytes.size
+): String? {
+    val safeLen = length.coerceAtMost(rawCmdlineBytes.size)
+    if (safeLen <= 0) return null
+    var nulIdx = 0
+    while (nulIdx < safeLen && rawCmdlineBytes[nulIdx] != 0.toByte()) {
+        nulIdx++
+    }
+    if (nulIdx == 0) return null
+    return String(rawCmdlineBytes, 0, nulIdx, StandardCharsets.UTF_8).trim().ifEmpty { null }
+}
+
+internal fun parseProcRealUid(statusText: String): Int? {
+    for (line in statusText.lineSequence()) {
+        if (line.startsWith("Uid:")) {
+            val firstToken = line.removePrefix("Uid:").trimStart().takeWhile { !it.isWhitespace() }
+            return firstToken.toIntOrNull()
+        }
+    }
+    return null
+}
+
+internal fun isStaleSiblingPeqServiceProcess(
+    pid: Int,
+    myPid: Int,
+    uid: Int?,
+    myUid: Int,
+    processName: String?,
+    expectedProcessName: String
+): Boolean {
+    if (pid <= 0 || pid == myPid) return false
+    if (uid == null || uid != myUid) return false
+    if (!expectedProcessName.endsWith(PEQ_USER_SERVICE_PROCESS_SUFFIX)) return false
+    return processName == expectedProcessName
+}
 
 /**
  * Runs inside Shizuku's UID 2000 (com.android.shell) process via UserService.
@@ -42,6 +86,8 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
         private const val AUDIO_MANAGER_SUCCESS = 0
         private const val SAMPLE_RATE = 48000
         private const val BLOCK_SHORTS = 480 * 2 // 10 ms @ 48 kHz stereo PCM_16BIT
+        private const val SIGNAL_SIGTERM = 15
+        private const val SIGNAL_SIGKILL = 9
     }
 
     private class FakeShellContext(base: Context) : ContextWrapper(base) {
@@ -68,7 +114,15 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
 
     private val processor = StereoPeqProcessor(SAMPLE_RATE.toDouble())
     private val stateLock = Any()
+    private val clientLock = Any()
     private val loopRunning = AtomicBoolean(false)
+    private val destroying = AtomicBoolean(false)
+
+    @Volatile
+    private var linkedClientToken: IBinder? = null
+
+    @Volatile
+    private var clientDeathRecipient: IBinder.DeathRecipient? = null
 
     @Volatile
     private var audioPolicyObj: Any? = null
@@ -112,6 +166,70 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
         Runtime.getRuntime().addShutdownHook(Thread({
             stopInternal()
         }, "peq-shutdown-hook"))
+        terminateStaleSiblingServices()
+    }
+
+    private fun readProcessCmdlineName(cmdlineFile: File): String? {
+        return try {
+            val buf = ByteArray(256)
+            FileInputStream(cmdlineFile).use { input ->
+                val read = input.read(buf)
+                extractProcCmdlineProcessName(buf, read)
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun terminateStaleSiblingServices() {
+        val myPid = Process.myPid()
+        val myUid = Process.myUid()
+        val expectedProcessName = readProcessCmdlineName(File("/proc/self/cmdline")) ?: return
+        if (!expectedProcessName.endsWith(PEQ_USER_SERVICE_PROCESS_SUFFIX)) return
+
+        val procEntries = File("/proc").listFiles() ?: return
+        val signalledPids = ArrayList<Int>()
+        for (entry in procEntries) {
+            val pid = entry.name.toIntOrNull() ?: continue
+            if (pid <= 0 || pid == myPid) continue
+            val procName = readProcessCmdlineName(File(entry, "cmdline"))
+            if (procName != expectedProcessName) continue
+            val uid = try {
+                parseProcRealUid(File(entry, "status").readText())
+            } catch (_: Throwable) {
+                null
+            }
+            if (!isStaleSiblingPeqServiceProcess(pid, myPid, uid, myUid, procName, expectedProcessName)) {
+                continue
+            }
+            try {
+                Log.w(TAG, "Terminating stale sibling PEQ UserService pid=$pid ($procName)")
+                Process.sendSignal(pid, SIGNAL_SIGTERM)
+                signalledPids.add(pid)
+            } catch (t: Throwable) {
+                Log.w(TAG, "Failed SIGTERM to stale sibling pid=$pid", t)
+            }
+        }
+        if (signalledPids.isEmpty()) return
+
+        val deadlineNs = System.nanoTime() + 450_000_000L
+        var remaining = signalledPids.filter { File("/proc/$it").exists() }
+        while (remaining.isNotEmpty() && System.nanoTime() < deadlineNs) {
+            try {
+                Thread.sleep(40L)
+            } catch (_: InterruptedException) {
+                break
+            }
+            remaining = remaining.filter { File("/proc/$it").exists() }
+        }
+        for (pid in remaining) {
+            try {
+                Log.w(TAG, "Force-killing unresponsive sibling PEQ UserService pid=$pid")
+                Process.sendSignal(pid, SIGNAL_SIGKILL)
+            } catch (t: Throwable) {
+                Log.w(TAG, "Failed SIGKILL to sibling pid=$pid", t)
+            }
+        }
     }
 
     @SuppressLint("PrivateApi")
@@ -140,6 +258,7 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
     ): Boolean {
         synchronized(stateLock) {
             stopInternal()
+            terminateStaleSiblingServices()
             lastError = null
             excludedUidCount = 0
             framesProcessed.set(0L)
@@ -496,7 +615,49 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
         }.toString()
     }
 
+    override fun registerClientToken(clientToken: IBinder?) {
+        if (clientToken == null || destroying.get()) return
+        var clientAlreadyDead = false
+        synchronized(clientLock) {
+            if (linkedClientToken === clientToken) return
+            unlinkClientTokenLocked()
+            val recipient = IBinder.DeathRecipient {
+                Log.w(TAG, "Client process binder died; shutting down UserService")
+                destroy()
+            }
+            try {
+                clientToken.linkToDeath(recipient, 0)
+                linkedClientToken = clientToken
+                clientDeathRecipient = recipient
+            } catch (t: Throwable) {
+                Log.w(TAG, "Client token already dead during registration; destroying", t)
+                clientAlreadyDead = true
+            }
+        }
+        if (clientAlreadyDead) {
+            destroy()
+        }
+    }
+
+    private fun unlinkClientTokenLocked() {
+        val token = linkedClientToken
+        val recipient = clientDeathRecipient
+        linkedClientToken = null
+        clientDeathRecipient = null
+        if (token != null && recipient != null) {
+            try {
+                token.unlinkToDeath(recipient, 0)
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
     override fun destroy() {
+        if (!destroying.compareAndSet(false, true)) return
+        Log.i(TAG, "Destroying AudioLoopbackUserService cleanly")
+        synchronized(clientLock) {
+            unlinkClientTokenLocked()
+        }
         stopLoopback()
         exitProcess(0)
     }

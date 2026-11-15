@@ -260,7 +260,8 @@ fun MainScreen() {
                                     editingTarget = uiState.editingTarget,
                                     bypassed = uiState.pausedByDeviceRule || !uiState.masterPowerOn,
                                     channelSwap = uiState.channelSwap,
-                                    onAutoPreampClick = { PeqEngineManager.autoAdjustCommonPreamp() }
+                                    onAutoPreampClick = { PeqEngineManager.autoAdjustCommonPreamp() },
+                                    onSelectTarget = { PeqEngineManager.selectEditingTarget(it) },
                                 )
 
                                 PeqEditorTab(
