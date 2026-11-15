@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Quve</string>
+
+    <!-- Common Actions -->
+    <string name="action_cancel">Cancel</string>
+    <string name="action_apply">Apply</string>
+    <string name="action_save">Save</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_duplicate">Duplicate</string>
+    <string name="action_reset">Reset</string>
+    <string name="action_reset_all">Reset</string>
+    <string name="action_done">Done</string>
+    <string name="action_import">Import</string>
+    <string name="action_retry_refresh">Refresh</string>
+
+    <!-- Language -->
+    <string name="lang_section_title">Language</string>
+    <string name="lang_section_subtitle">Follows device language by default; switch anytime</string>
+    <string name="lang_system">System</string>
+    <string name="lang_english">English</string>
+    <string name="lang_japanese">日本語</string>
+
+    <!-- Tabs & Top Bar -->
+    <string name="tab_peq">PEQ</string>
+    <string name="tab_presets">Presets</string>
+    <string name="tab_routing">Routing</string>
+    <string name="shizuku_uid_2000">UID 2000</string>
+    <string name="shizuku_authorized">Authorized</string>
+    <string name="shizuku_permission_needed">Permission</string>
+    <string name="shizuku_stopped">Shizuku Off</string>
+    <string name="cd_appearance_settings">Appearance &amp; Liquid Glass</string>
+    <string name="header_subtitle_format">64-bit Exclusive • %1$s</string>
+    <string name="badge_lr_swap">L⇄R Swap</string>
+
+    <!-- Quick Dock -->
+    <string name="dock_status_running">Active • %1$s</string>
+    <string name="dock_status_paused_rule">Rule OFF • %1$s</string>
+    <string name="dock_status_starting">Standby • %1$s</string>
+    <string name="dock_status_bypassed">Bypassed • %1$s</string>
+    <string name="dock_detecting">Detecting</string>
+    <string name="dock_stopped">Stopped</string>
+    <string name="cd_toggle_channel_swap">Toggle Channel Swap</string>
+
+    <!-- Engine Hero Card -->
+    <string name="hero_status_running">PEQ Active (Exclusive Loopback)</string>
+    <string name="hero_status_paused_rule">EQ OFF by Device Rule</string>
+    <string name="hero_status_starting">Starting Engine…</string>
+    <string name="hero_status_stopped">PEQ Engine Stopped</string>
+    <string name="hero_detecting_output">Detecting output device…</string>
+    <string name="hero_power_on">ON</string>
+    <string name="hero_power_off">OFF</string>
+    <string name="hero_telemetry_in_out">In %1$.1f → Out %2$.1f dBFS</string>
+    <string name="hero_sample_bit">48kHz / 64-bit</string>
+    <string name="hero_shizuku_not_running">Start Shizuku to apply system-wide PEQ</string>
+    <string name="hero_shizuku_permission_required">Please grant Shizuku permission</string>
+    <string name="hero_engine_error">Engine error: %1$s</string>
+
+    <!-- Frequency Response Graph -->
+    <string name="freq_response_title">Freq. Response</string>
+    <string name="badge_bypass">Bypass</string>
+    <string name="badge_peak_db">Peak %1$+.1f dB</string>
+    <string name="legend_total_l">Total L</string>
+    <string name="legend_total_r">Total R</string>
+    <string name="legend_common_lr">Common L+R</string>
+    <string name="freq_peak_warning_tap">Peak reaches +%1$.1f dB (Tap to auto-balance)</string>
+
+    <!-- PEQ Editor -->
+    <string name="channel_common_short">Common</string>
+    <string name="channel_left_short">Left L</string>
+    <string name="channel_right_short">Right R</string>
+    <string name="channel_common_label">Common (L+R)</string>
+    <string name="channel_left_label">Left (HW Calib.)</string>
+    <string name="channel_right_label">Right (HW Calib.)</string>
+    <string name="channel_common_desc">Common PEQ: Applies identical tonal tuning to both L &amp; R channels (IEM/DAC signature).</string>
+    <string name="channel_left_desc">Left Independent PEQ: High-precision calibration for physical Left driver sensitivity &amp; acoustics.</string>
+    <string name="channel_right_desc">Right Independent PEQ: High-precision calibration for physical Right driver sensitivity &amp; acoustics.</string>
+    <string name="preamp_common_title">Preamp</string>
+    <string name="preamp_channel_title">%1$s Preamp</string>
+    <string name="action_auto_headroom">Auto 0dB</string>
+    <string name="action_add_band">Add Band</string>
+    <string name="action_paste_apo">Paste APO</string>
+    <string name="empty_bands_hint">No filters in %1$s.\nTap \"Add Band\" or import from Equalizer APO text.</string>
+    <string name="filters_group_title">%1$s Filters (%2$d)</string>
+    <string name="band_freq_label">Frequency (Fc): %1$s</string>
+    <string name="band_gain_label">Gain: %1$+.2f dB</string>
+    <string name="band_q_label">Q Factor: %1$.3f</string>
+    <string name="action_edit_numeric_type">Edit Value / Type</string>
+    <string name="cd_numeric_input">Numeric Input</string>
+    <string name="dialog_band_detail_title">Edit Filter Details</string>
+    <string name="dialog_filter_type_label">Filter Type</string>
+    <string name="dialog_freq_label">Center Frequency Fc (Hz)</string>
+    <string name="dialog_gain_label">Gain (dB)</string>
+    <string name="dialog_q_label">Q Factor</string>
+
+    <!-- Preset Modified Tracking & Presets Tab -->
+    <string name="preset_flat_name">Flat (0 dB)</string>
+    <string name="preset_edited_badge">Edited</string>
+    <string name="preset_name_edited_format">%1$s (Edited)</string>
+    <string name="preset_active_badge">Active</string>
+    <string name="action_revert_to_original">Revert</string>
+    <string name="action_revert_to_imported">Revert to Original</string>
+    <string name="action_save_as_new_short">Save New</string>
+    <string name="apo_card_title">Equalizer APO (.txt)</string>
+    <string name="apo_card_desc">Import &amp; export Equalizer APO files including Channel: L / Channel: R sections and per-preset L⇄R swap settings.</string>
+    <string name="action_import_file">Import File</string>
+    <string name="action_paste_text">Paste Text</string>
+    <string name="action_export_apo">Export APO</string>
+    <string name="action_save_as_new">Save as New</string>
+    <string name="saved_presets_title">Saved Presets (%1$d)</string>
+    <string name="preset_summary_format">Common:%1$d(%2$+.1f) · L:%3$d(%4$+.1f) · R:%5$d(%6$+.1f) dB</string>
+    <string name="cd_preset_actions">Preset Actions</string>
+    <string name="dialog_save_as_title">Save as New Preset</string>
+    <string name="dialog_save_as_revert_source">Also revert \"%1$s\" to original</string>
+    <string name="dialog_save_as_same_name_error">Enter a name different from \"%1$s\"</string>
+    <string name="default_new_preset_name">New Preset</string>
+    <string name="default_custom_suffix">Custom</string>
+    <string name="dialog_rename_title">Rename Preset</string>
+    <string name="dialog_delete_title">Delete Preset</string>
+    <string name="dialog_delete_message">Delete \"%1$s\"? This action cannot be undone.</string>
+    <string name="field_preset_name">Preset Name</string>
+    <string name="dialog_paste_whole_title">Create Preset from APO Text</string>
+    <string name="dialog_paste_section_title">Import APO into %1$s</string>
+    <string name="field_apo_lines">Paste Preamp / Channel / Filter lines</string>
+    <string name="default_apo_import_name">APO Import</string>
+
+    <!-- Routing Tab -->
+    <string name="routing_preset_linked">Linked Preset: %1$s</string>
+    <string name="routing_channel_swap_title">Channel Swap</string>
+    <string name="routing_channel_swap_on">L/R Reversed (saved per preset)</string>
+    <string name="routing_channel_swap_off">Standard (L→L, R→R)</string>
+    <string name="routing_flow_off">Flow: In → Common PEQ → L/R Indep. PEQ (HW) → DAC</string>
+    <string name="routing_flow_before">Flow: In → Common PEQ → [L⇄R Swap] → L/R Indep. PEQ (HW) → DAC</string>
+    <string name="routing_flow_after">Flow: In → Common PEQ → L/R Indep. PEQ (HW) → [L⇄R Swap] → DAC</string>
+    <string name="routing_swap_timing_label">Swap Stage Placement</string>
+    <string name="swap_pos_before_title">Swap before L/R independent PEQ (Recommended · keeps HW cal.)</string>
+    <string name="swap_pos_before_detail">In LR → Common PEQ → [L⇄R Swap] → L/R Indep. PEQ → DAC\nHardware sensitivity &amp; driver calibration stays locked to physical Left and Right drivers.</string>
+    <string name="swap_pos_after_title">Swap after L/R independent PEQ (e.g., reversed cable)</string>
+    <string name="swap_pos_after_detail">In LR → Common PEQ → L/R Indep. PEQ → [L⇄R Swap] → DAC\nIndependent PEQ runs on source channels before swapping final DAC output pins.</string>
+    <string name="routing_rules_title">Output Device Auto-Switch (%1$d)</string>
+    <string name="routing_rules_desc">Monitors USB DAC, Bluetooth &amp; speaker changes and auto-applies the assigned preset (including its L⇄R swap state).</string>
+    <string name="rule_follow_manual_short">Manual Selection</string>
+    <string name="rule_eq_off_short">EQ OFF (Bypass)</string>
+    <string name="rule_preset_unselected">No Preset Selected</string>
+    <string name="device_badge_active">Active Output</string>
+    <string name="device_badge_connected">Connected</string>
+    <string name="cd_remove_history">Remove History</string>
+    <string name="rule_action_prefix">Action: %1$s</string>
+    <string name="rule_menu_follow_manual">Follow Current Manual Selection</string>
+    <string name="rule_menu_eq_off">EQ OFF (Bypass / Native Playback)</string>
+    <string name="rule_menu_auto_preset">Auto-Apply: %1$s</string>
+
+    <!-- Device Categories & Monitor -->
+    <string name="device_cat_speaker">Built-in Speaker</string>
+    <string name="device_cat_bluetooth">Bluetooth Device</string>
+    <string name="device_cat_usb_dac">USB DAC</string>
+    <string name="device_cat_wired">Wired / Line Out</string>
+    <string name="device_built_in_speaker">Built-in Speaker</string>
+    <string name="device_bt_audio_fallback">Bluetooth Audio (%1$s)</string>
+    <string name="device_wired_headset">Wired Headset</string>
+    <string name="device_wired_headphones">Wired Headphones</string>
+    <string name="device_digital_line_out">Digital Line Out</string>
+    <string name="device_wired_line_out">Wired / Line Out</string>
+
+    <!-- Appearance & Liquid Glass -->
+    <string name="appearance_title">Appearance &amp; Liquid Glass</string>
+    <string name="appearance_subtitle">Theme · Language · Liquid Glass</string>
+    <string name="theme_section_title">Color Theme</string>
+    <string name="theme_mode_dark">Dark</string>
+    <string name="theme_mode_light">Light</string>
+    <string name="theme_mode_system">System</string>
+    <string name="amoled_title">AMOLED Pure Black</string>
+    <string name="amoled_subtitle">Use pure #000000 black background in dark mode</string>
+    <string name="palette_quve_title">Quve Expressive Palettes (6)</string>
+    <string name="palette_rootless_title">RootlessJamesDSP Palettes (8)</string>
+    <string name="palette_quve_vermilion">Quve Orange</string>
+    <string name="palette_midnight_studio">Midnight Studio</string>
+    <string name="palette_sakura_neon">Sakura Neon</string>
+    <string name="palette_cyber_amber">Cyber Amber</string>
+    <string name="palette_nordic_slate">Nordic Slate</string>
+    <string name="palette_electric_violet">Electric Violet</string>
+    <string name="glass_material_title">Liquid Glass Material</string>
+    <string name="glass_style_clear">Clear</string>
+    <string name="glass_style_frosted">Frosted</string>
+    <string name="glass_clarity_label">Clarity</string>
+    <string name="glass_shade_label">Dark Shade</string>
+    <string name="glass_blur_label">Blur Radius</string>
+    <string name="glass_frosted_opacity_label">Frost Opacity</string>
+    <string name="glass_refraction_label">Refraction &amp; Dispersion</string>
+    <string name="dock_section_title">Tab Pill &amp; Dock</string>
+    <string name="pill_motion_fast">Snappy</string>
+    <string name="pill_motion_fluid">Fluid</string>
+    <string name="pill_motion_relaxed">Relaxed</string>
+    <string name="switch_lock_dock_title">Always Expand Dock</string>
+    <string name="switch_lock_dock_subtitle">Keep quick controls expanded while scrolling</string>
+    <string name="switch_dock_bounce_title">Dock Expand Spring Bounce</string>
+    <string name="switch_dock_bounce_subtitle">Add a gentle spring rebound when unfolding</string>
+    <string name="switch_hide_labels_title">Hide Navigation Labels</string>
+    <string name="switch_hide_labels_subtitle">Minimal icon-only tab pill style</string>
+    <string name="switch_reduce_blur_title">Reduce Dynamic Blur</string>
+    <string name="switch_reduce_blur_subtitle">Simpler rendering for battery saving or heavy load</string>
+    <string name="switch_reduce_motion_title">Reduce Pill &amp; Popup Motion</string>
+    <string name="switch_reduce_motion_subtitle">Minimize spring stretch for instant transitions</string>
+
+    <!-- Manager Banners & Service Notifications -->
+    <string name="banner_shizuku_not_running">Shizuku service is not running. Start it in the Shizuku app.</string>
+    <string name="banner_shizuku_bind_failed">Shizuku bind failed: %1$s</string>
+    <string name="banner_device_eq_off">%1$s connected: Auto EQ OFF (Bypassed)</string>
+    <string name="banner_device_auto_preset">%1$s → Auto-applied \"%2$s\"</string>
+    <string name="banner_preset_selected">Selected preset \"%1$s\"</string>
+    <string name="banner_auto_preamp_adjusted">Auto-adjusted Common Preamp to %1$.1f dB for 0 dB peak</string>
+    <string name="banner_saved_new_preset">Saved new preset \"%1$s\"</string>
+    <string name="banner_reverted_preset">Reverted \"%1$s\" to original</string>
+    <string name="banner_duplicated_preset">Created \"%1$s\"</string>
+    <string name="banner_cannot_delete_last">Cannot delete the last preset</string>
+    <string name="banner_deleted_preset">Preset deleted</string>
+    <string name="banner_apo_no_valid_filters">No valid Equalizer APO filters found</string>
+    <string name="banner_apo_imported_preset">Imported \"%1$s\" (Common %2$d / L %3$d / R %4$d)</string>
+    <string name="banner_apo_imported_section">Imported %2$d band(s) into %1$s</string>
+    <string name="preset_copy_suffix">Copy</string>
+    <string name="preset_custom_fallback">Custom PEQ</string>
+    <string name="notif_running_title">Quve Active: %1$s</string>
+    <string name="notif_paused_title">Quve Paused (Device Rule OFF)</string>
+    <string name="notif_paused_text">Native audio on %1$s</string>
+    <string name="notif_default_title">Quve Active</string>
+    <string name="notif_default_text">64-bit Parametric EQ (Exclusive Loopback)</string>
+    <string name="notif_channel_name">System-Wide PEQ Engine</string>
+    <string name="notif_channel_desc">Persistent notification for Shizuku loopback DSP engine</string>
+    <string name="notif_action_stop">Stop</string>
+    <string name="default_output_label">Default Output</string>
+    <string name="connected_device_label">Connected Device</string>
+
+    <!-- App Bypass -->
+    <string name="routing_bypass_apps_title">App Bypass (%1$d)</string>
+    <string name="routing_bypass_apps_desc">Selected apps skip Quve loopback capture and play directly through Android\'s standard audio path.</string>
+    <string name="routing_bypass_apps_empty">No apps bypassed. All media &amp; game audio is processed by Quve.</string>
+    <string name="action_select_bypass_apps">Select Apps</string>
+    <string name="action_clear_all">Clear All</string>
+    <string name="cd_remove_bypass_app">Stop bypassing %1$s</string>
+    <string name="bypass_picker_title">Bypass Quve Processing</string>
+    <string name="bypass_picker_subtitle">%1$d selected • Reconnects loopback engine on apply</string>
+    <string name="bypass_picker_search_hint">Search app or package name</string>
+    <string name="cd_clear_search">Clear search</string>
+    <string name="bypass_filter_standard">Standard Apps</string>
+    <string name="bypass_filter_all">All (+System)</string>
+    <string name="bypass_picker_loading">Loading installed apps…</string>
+    <string name="bypass_picker_empty">No matching apps found</string>
+    <string name="bypass_uid_badge">UID %1$d</string>
+    <string name="bypass_not_installed">Not installed</string>
+    <string name="action_apply_count">Apply (%1$d)</string>
+    <string name="banner_bypass_apps_updated">Updated app bypass list (%1$d)</string>
+    <string name="banner_bypass_apps_cleared">Cleared all bypassed apps</string>
+</resources>

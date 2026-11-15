@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Quve</string>
+
+    <!-- Common Actions -->
+    <string name="action_cancel">キャンセル</string>
+    <string name="action_apply">適用</string>
+    <string name="action_save">保存</string>
+    <string name="action_rename">変更</string>
+    <string name="action_delete">削除</string>
+    <string name="action_duplicate">複製</string>
+    <string name="action_reset">リセット</string>
+    <string name="action_reset_all">初期化</string>
+    <string name="action_done">完了</string>
+    <string name="action_import">インポート</string>
+    <string name="action_retry_refresh">再確認</string>
+
+    <!-- Language -->
+    <string name="lang_section_title">言語 / Language</string>
+    <string name="lang_section_subtitle">英語圏では自動で英語表示になります</string>
+    <string name="lang_system">システム</string>
+    <string name="lang_english">English</string>
+    <string name="lang_japanese">日本語</string>
+
+    <!-- Tabs & Top Bar -->
+    <string name="tab_peq">PEQ</string>
+    <string name="tab_presets">プリセット</string>
+    <string name="tab_routing">機器・設定</string>
+    <string name="shizuku_uid_2000">UID 2000</string>
+    <string name="shizuku_authorized">許可済</string>
+    <string name="shizuku_permission_needed">権限許可</string>
+    <string name="shizuku_stopped">Shizuku 停止</string>
+    <string name="cd_appearance_settings">外観・Liquid Glass 設定</string>
+    <string name="header_subtitle_format">64-bit Exclusive • %1$s</string>
+    <string name="badge_lr_swap">L⇄R SWAP</string>
+
+    <!-- Quick Dock -->
+    <string name="dock_status_running">稼働中 • %1$s</string>
+    <string name="dock_status_paused_rule">機器ルールで停止 • %1$s</string>
+    <string name="dock_status_starting">待機中 • %1$s</string>
+    <string name="dock_status_bypassed">バイパス中 • %1$s</string>
+    <string name="dock_detecting">検出中</string>
+    <string name="dock_stopped">停止</string>
+    <string name="cd_toggle_channel_swap">チャンネルスワップ切替</string>
+
+    <!-- Engine Hero Card -->
+    <string name="hero_status_running">PEQ 稼働中 (排他ループバック)</string>
+    <string name="hero_status_paused_rule">出力機器ルールにより EQ OFF</string>
+    <string name="hero_status_starting">エンジン起動中…</string>
+    <string name="hero_status_stopped">PEQ エンジン停止中</string>
+    <string name="hero_detecting_output">出力先検出中…</string>
+    <string name="hero_power_on">ON</string>
+    <string name="hero_power_off">OFF</string>
+    <string name="hero_telemetry_in_out">In %1$.1f → Out %2$.1f dBFS</string>
+    <string name="hero_sample_bit">48kHz / 64-bit</string>
+    <string name="hero_shizuku_not_running">Shizuku を起動するとシステム全体に適用できます</string>
+    <string name="hero_shizuku_permission_required">Shizuku 権限を許可してください</string>
+    <string name="hero_engine_error">エンジンエラー: %1$s</string>
+
+    <!-- Frequency Response Graph -->
+    <string name="freq_response_title">周波数特性</string>
+    <string name="badge_bypass">BYPASS</string>
+    <string name="badge_peak_db">Peak %1$+.1f dB</string>
+    <string name="legend_total_l">Total L</string>
+    <string name="legend_total_r">Total R</string>
+    <string name="legend_common_lr">共通 L+R</string>
+    <string name="freq_peak_warning_tap">ピークが +%1$.1f dB あります（タップで自動補正）</string>
+
+    <!-- PEQ Editor -->
+    <string name="channel_common_short">共通</string>
+    <string name="channel_left_short">左 L</string>
+    <string name="channel_right_short">右 R</string>
+    <string name="channel_common_label">左右共通 (L+R)</string>
+    <string name="channel_left_label">左独立 (HW補正)</string>
+    <string name="channel_right_label">右独立 (HW補正)</string>
+    <string name="channel_common_desc">左右共通 PEQ: L・R 両チャンネルに同一の補正を適用します（イヤホン/DAC全体の音作り補正）。</string>
+    <string name="channel_left_desc">L 独立 PEQ: 物理L側のドライバ・筐体の音圧/特性偏りのみを独立して高精度補正します。</string>
+    <string name="channel_right_desc">R 独立 PEQ: 物理R側のドライバ・筐体の音圧/特性偏りのみを独立して高精度補正します。</string>
+    <string name="preamp_common_title">プリアンプ</string>
+    <string name="preamp_channel_title">%1$s プリアンプ</string>
+    <string name="action_auto_headroom">自動 0dB</string>
+    <string name="action_add_band">バンド追加</string>
+    <string name="action_paste_apo">APO貼付</string>
+    <string name="empty_bands_hint">このチャンネル (%1$s) にはフィルタがありません。\n「バンド追加」または Equalizer APO テキストから読み込めます。</string>
+    <string name="filters_group_title">%1$s フィルタ (%2$d)</string>
+    <string name="band_freq_label">周波数 (Fc): %1$s</string>
+    <string name="band_gain_label">ゲイン (Gain): %1$+.2f dB</string>
+    <string name="band_q_label">Q値: %1$.3f</string>
+    <string name="action_edit_numeric_type">数値 / 種別を編集</string>
+    <string name="cd_numeric_input">数値入力</string>
+    <string name="dialog_band_detail_title">フィルタの詳細編集</string>
+    <string name="dialog_filter_type_label">フィルタ種別</string>
+    <string name="dialog_freq_label">中心周波数 Fc (Hz)</string>
+    <string name="dialog_gain_label">ゲイン Gain (dB)</string>
+    <string name="dialog_q_label">Q 値</string>
+
+    <!-- Preset Modified Tracking & Presets Tab -->
+    <string name="preset_flat_name">フラット (0 dB)</string>
+    <string name="preset_edited_badge">編集済み</string>
+    <string name="preset_name_edited_format">%1$s (編集済み)</string>
+    <string name="preset_active_badge">適用中</string>
+    <string name="action_revert_to_original">元に戻す</string>
+    <string name="action_revert_to_imported">元の状態に戻す</string>
+    <string name="action_save_as_new_short">別名保存</string>
+    <string name="apo_card_title">Equalizer APO (.txt) 管理</string>
+    <string name="apo_card_desc">Channel: L / Channel: R を含む設定ファイルやチャンネルスワップ設定をそのまま読込・書出しできます。</string>
+    <string name="action_import_file">ファイル読込</string>
+    <string name="action_paste_text">テキスト貼付</string>
+    <string name="action_export_apo">APO書出し</string>
+    <string name="action_save_as_new">別名で保存</string>
+    <string name="saved_presets_title">保存済みプリセット (%1$d)</string>
+    <string name="preset_summary_format">共通:%1$d(%2$+.1f) · L:%3$d(%4$+.1f) · R:%5$d(%6$+.1f) dB</string>
+    <string name="cd_preset_actions">プリセット操作</string>
+    <string name="dialog_save_as_title">別プリセットとして新規保存</string>
+    <string name="dialog_save_as_revert_source">元の「%1$s」をインポート直後の状態に戻す</string>
+    <string name="dialog_save_as_same_name_error">元の「%1$s」とは異なるプリセット名を入力してください</string>
+    <string name="default_new_preset_name">新しいプリセット</string>
+    <string name="default_custom_suffix">カスタム</string>
+    <string name="dialog_rename_title">プリセット名を変更</string>
+    <string name="dialog_delete_title">プリセットを削除</string>
+    <string name="dialog_delete_message">「%1$s」を削除しますか？この操作は元に戻せません。</string>
+    <string name="field_preset_name">プリセット名</string>
+    <string name="dialog_paste_whole_title">APO テキストから新規作成</string>
+    <string name="dialog_paste_section_title">%1$s に APO 取込</string>
+    <string name="field_apo_lines">Preamp / Channel / Filter 行を貼付</string>
+    <string name="default_apo_import_name">APO インポート</string>
+
+    <!-- Routing Tab -->
+    <string name="routing_preset_linked">プリセット連動: %1$s</string>
+    <string name="routing_channel_swap_title">チャンネルスワップ</string>
+    <string name="routing_channel_swap_on">左右反転 有効（このプリセットに保存）</string>
+    <string name="routing_channel_swap_off">標準 (L→L, R→R)</string>
+    <string name="routing_flow_off">信号フロー: 入力 → 共通PEQ → L/R独立PEQ(HW補正) → DAC出力</string>
+    <string name="routing_flow_before">信号フロー: 入力 → 共通PEQ → [L⇄R スワップ] → L/R独立PEQ(HW補正) → DAC出力</string>
+    <string name="routing_flow_after">信号フロー: 入力 → 共通PEQ → L/R独立PEQ(HW補正) → [L⇄R スワップ] → DAC出力</string>
+    <string name="routing_swap_timing_label">スワップの挿入タイミング</string>
+    <string name="swap_pos_before_title">左右独立PEQの前にスワップ（推奨・HW補正維持）</string>
+    <string name="swap_pos_before_detail">入力LR → 共通PEQ → [L⇄R スワップ] → 左右独立PEQ → DAC出力\nイヤホン/機器側のL・R個別の音圧・特性ばらつき補正が、常に物理的なLドライバー・Rドライバーに正しく固定されます。</string>
+    <string name="swap_pos_after_title">左右独立PEQの後にスワップ（ケーブル逆挿し補正など）</string>
+    <string name="swap_pos_after_detail">入力LR → 共通PEQ → 左右独立PEQ → [L⇄R スワップ] → DAC出力\n左右独立PEQが元の音源チャンネル側に対してかかったあと、最終段のL/R出力ピンだけを入れ替えます。</string>
+    <string name="routing_rules_title">出力機器別 自動プリセット連動 (%1$d)</string>
+    <string name="routing_rules_desc">USB DAC・Bluetooth機器・スピーカーの切替を監視し、割当プリセット（各プリセットのL⇄Rスワップ設定含む）へ自動切替します。</string>
+    <string name="rule_follow_manual_short">手動選択を使用</string>
+    <string name="rule_eq_off_short">EQ OFF (バイパス)</string>
+    <string name="rule_preset_unselected">プリセット未選択</string>
+    <string name="device_badge_active">現在の出力先</string>
+    <string name="device_badge_connected">接続済み</string>
+    <string name="cd_remove_history">履歴を削除</string>
+    <string name="rule_action_prefix">動作: %1$s</string>
+    <string name="rule_menu_follow_manual">現在の手動選択に追従</string>
+    <string name="rule_menu_eq_off">EQ OFF（バイパス / ネイティブ再生）</string>
+    <string name="rule_menu_auto_preset">自動適用: %1$s</string>
+
+    <!-- Device Categories & Monitor -->
+    <string name="device_cat_speaker">本体スピーカー</string>
+    <string name="device_cat_bluetooth">Bluetooth 機器</string>
+    <string name="device_cat_usb_dac">USB DAC</string>
+    <string name="device_cat_wired">有線イヤホン / Line</string>
+    <string name="device_built_in_speaker">本体スピーカー</string>
+    <string name="device_bt_audio_fallback">Bluetooth オーディオ (%1$s)</string>
+    <string name="device_wired_headset">有線ヘッドセット</string>
+    <string name="device_wired_headphones">有線ヘッドホン</string>
+    <string name="device_digital_line_out">デジタル Line Out</string>
+    <string name="device_wired_line_out">有線 / Line Out</string>
+
+    <!-- Appearance & Liquid Glass -->
+    <string name="appearance_title">外観 &amp; Liquid Glass</string>
+    <string name="appearance_subtitle">テーマ · 言語 · Liquid Glass 設定</string>
+    <string name="theme_section_title">カラーテーマ</string>
+    <string name="theme_mode_dark">ダーク</string>
+    <string name="theme_mode_light">ライト</string>
+    <string name="theme_mode_system">システム</string>
+    <string name="amoled_title">AMOLED ピュアブラック</string>
+    <string name="amoled_subtitle">ダーク時の背景を #000000 の完全黒に</string>
+    <string name="palette_quve_title">Quve Expressive パレット (6種)</string>
+    <string name="palette_rootless_title">RootlessJamesDSP 互換パレット (8種)</string>
+    <string name="palette_quve_vermilion">Quve オレンジ</string>
+    <string name="palette_midnight_studio">ミッドナイトスタジオ</string>
+    <string name="palette_sakura_neon">サクラネオン</string>
+    <string name="palette_cyber_amber">サイバーアンバー</string>
+    <string name="palette_nordic_slate">ノルディックスレート</string>
+    <string name="palette_electric_violet">エレクトリックバイオレット</string>
+    <string name="glass_material_title">Liquid Glass マテリアル</string>
+    <string name="glass_style_clear">クリア</string>
+    <string name="glass_style_frosted">フロスト</string>
+    <string name="glass_clarity_label">クリア透過度</string>
+    <string name="glass_shade_label">ダークシェード</string>
+    <string name="glass_blur_label">ブラー半径</string>
+    <string name="glass_frosted_opacity_label">フロスト濃度</string>
+    <string name="glass_refraction_label">レンズ屈折・色収差</string>
+    <string name="dock_section_title">タブピル &amp; ドック設定</string>
+    <string name="pill_motion_fast">キレ (速め)</string>
+    <string name="pill_motion_fluid">フルイド</string>
+    <string name="pill_motion_relaxed">ゆったり</string>
+    <string name="switch_lock_dock_title">下部ドックを常に展開固定</string>
+    <string name="switch_lock_dock_subtitle">スクロールしても小型化せず操作バーを表示し続けます</string>
+    <string name="switch_dock_bounce_title">ドック展開時のスプリングバウンス</string>
+    <string name="switch_dock_bounce_subtitle">折りたたみ復帰時に柔らかな反動を付けます</string>
+    <string name="switch_hide_labels_title">ナビゲーションラベルを隠す</string>
+    <string name="switch_hide_labels_subtitle">タブピルをアイコンのみのミニマル表示にします</string>
+    <string name="switch_reduce_blur_title">動的ブラーを軽減</string>
+    <string name="switch_reduce_blur_subtitle">バッテリー節約・高負荷時のシンプル描画に切り替えます</string>
+    <string name="switch_reduce_motion_title">ピル・ポップアップの揺らぎを軽減</string>
+    <string name="switch_reduce_motion_subtitle">スプリング伸縮を抑えて即座に切り替えます</string>
+
+    <!-- Manager Banners & Service Notifications -->
+    <string name="banner_shizuku_not_running">Shizuku サービスが起動していません。Shizuku アプリで開始してください。</string>
+    <string name="banner_shizuku_bind_failed">Shizuku サービス接続に失敗: %1$s</string>
+    <string name="banner_device_eq_off">%1$s 接続中のため自動で EQ OFF（バイパス）中です</string>
+    <string name="banner_device_auto_preset">%1$s → 「%2$s」を自動適用</string>
+    <string name="banner_preset_selected">プリセット「%1$s」を選択しました</string>
+    <string name="banner_auto_preamp_adjusted">最大ゲイン 0 dB に合わせて共通プリアンプを %1$.1f dB に自動調整しました</string>
+    <string name="banner_saved_new_preset">新規プリセット「%1$s」を保存しました</string>
+    <string name="banner_reverted_preset">「%1$s」を元の設定に戻しました</string>
+    <string name="banner_duplicated_preset">「%1$s」を作成しました</string>
+    <string name="banner_cannot_delete_last">最後の1件は削除できません</string>
+    <string name="banner_deleted_preset">プリセットを削除しました</string>
+    <string name="banner_apo_no_valid_filters">有効な Equalizer APO フィルタが見つかりませんでした</string>
+    <string name="banner_apo_imported_preset">APO インポート完了「%1$s」(共通 %2$d / L %3$d / R %4$d)</string>
+    <string name="banner_apo_imported_section">%1$s に %2$d バンドをインポートしました</string>
+    <string name="preset_copy_suffix">コピー</string>
+    <string name="preset_custom_fallback">カスタム PEQ</string>
+    <string name="notif_running_title">Quve 稼働中: %1$s</string>
+    <string name="notif_paused_title">Quve 一時停止中（機器連動 OFF）</string>
+    <string name="notif_paused_text">%1$s に連動しネイティブ再生中</string>
+    <string name="notif_default_title">Quve 稼働中</string>
+    <string name="notif_default_text">64bit パラメトリックEQ（排他ループバック）</string>
+    <string name="notif_channel_name">システムワイド PEQ エンジン</string>
+    <string name="notif_channel_desc">Shizuku 排他ループバック DSP エンジンの常駐通知</string>
+    <string name="notif_action_stop">停止</string>
+    <string name="default_output_label">標準出力</string>
+    <string name="connected_device_label">接続機器</string>
+
+    <!-- App Bypass -->
+    <string name="routing_bypass_apps_title">処理バイパスアプリ (%1$d)</string>
+    <string name="routing_bypass_apps_desc">選択したアプリは Quve のループバック処理を通さず、Android 標準の音声経路で直接再生します。</string>
+    <string name="routing_bypass_apps_empty">バイパス中のアプリはありません（すべてのメディア・ゲーム音声に Quve を適用）。</string>
+    <string name="action_select_bypass_apps">アプリを選択</string>
+    <string name="action_clear_all">全解除</string>
+    <string name="cd_remove_bypass_app">%1$s のバイパスを解除</string>
+    <string name="bypass_picker_title">Quve をバイパスするアプリ</string>
+    <string name="bypass_picker_subtitle">%1$d 件選択中 • 適用時にエンジンを再接続します</string>
+    <string name="bypass_picker_search_hint">アプリ名・パッケージ名で検索</string>
+    <string name="cd_clear_search">検索をクリア</string>
+    <string name="bypass_filter_standard">通常アプリ</string>
+    <string name="bypass_filter_all">システム含む</string>
+    <string name="bypass_picker_loading">インストール済みアプリを読み込み中…</string>
+    <string name="bypass_picker_empty">一致するアプリが見つかりません</string>
+    <string name="bypass_uid_badge">UID %1$d</string>
+    <string name="bypass_not_installed">未インストール</string>
+    <string name="action_apply_count">適用 (%1$d)</string>
+    <string name="banner_bypass_apps_updated">バイパス対象アプリを更新しました (%1$d 件)</string>
+    <string name="banner_bypass_apps_cleared">バイパス対象アプリをすべて解除しました</string>
+</resources>
