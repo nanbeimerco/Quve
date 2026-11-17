@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -53,16 +54,26 @@ import androidx.compose.ui.unit.sp
 import com.superglobalpeq.app.R
 import com.superglobalpeq.app.model.EqPreset
 import com.superglobalpeq.app.model.FilterType
+import com.superglobalpeq.app.model.IndependentPeqPreset
+import com.superglobalpeq.app.model.PREAMP_SLIDER_SPLIT_FRACTION
 import com.superglobalpeq.app.model.PeqBand
 import com.superglobalpeq.app.model.PeqChannelTarget
+import com.superglobalpeq.app.model.clampPreampDb
+import com.superglobalpeq.app.model.preampDbToSliderPos
+import com.superglobalpeq.app.model.sliderPosToPreampDb
 import com.superglobalpeq.app.ui.icons.LucideIcons
 import com.superglobalpeq.app.ui.theme.LocalQuveExpressiveColorScheme
+import kotlin.math.round
+import kotlin.math.roundToInt
 import java.util.Locale
 import kotlin.math.ln
 
 @Composable
 fun PeqEditorTab(
     preset: EqPreset,
+    commonPreset: EqPreset,
+    activeSavedIndependent: IndependentPeqPreset?,
+    draftIndependent: IndependentPeqPreset?,
     editingTarget: PeqChannelTarget,
     onSelectTarget: (PeqChannelTarget) -> Unit,
     onPreampChanged: (PeqChannelTarget, Double) -> Unit,
@@ -71,76 +82,66 @@ fun PeqEditorTab(
     onUpdateBand: (PeqChannelTarget, PeqBand) -> Unit,
     onRemoveBand: (PeqChannelTarget, String) -> Unit,
     onOpenSectionPasteDialog: (PeqChannelTarget) -> Unit,
-    onRevertPresetToOriginal: () -> Unit,
-    onSaveModifiedAsNew: (newName: String, revertSourceToOriginal: Boolean) -> Unit,
+    onRevertCommonToOriginal: () -> Unit,
+    onSaveCommonAsNew: (newName: String, revertSourceToOriginal: Boolean, includeActiveLr: Boolean) -> Unit,
+    onRevertIndependentToOriginal: () -> Unit,
+    onSaveIndependentAsNew: (newName: String, revertSourceToOriginal: Boolean) -> Unit,
+    onDiscardDraftIndependent: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val preampDb = preset.preampFor(editingTarget)
     val bands = preset.bandsFor(editingTarget)
     var editingNumericBand by remember { mutableStateOf<PeqBand?>(null) }
-    var showSaveAsDialog by remember { mutableStateOf(false) }
+    var showSaveCommonAsDialog by remember { mutableStateOf(false) }
+    var showSaveIndepAsDialog by remember { mutableStateOf(false) }
+
+    val isCommonTarget = editingTarget == PeqChannelTarget.COMMON
+    val showCommonModifiedBar = isCommonTarget && commonPreset.isCommonModifiedFromBaseline
+    val showIndepModifiedBar = !isCommonTarget && activeSavedIndependent?.isModifiedFromBaseline == true
+    val showDraftLrBar = !isCommonTarget && activeSavedIndependent == null && draftIndependent != null
 
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Modified preset quick bar: 1-tap Revert or Save as New
-        AnimatedVisibility(visible = preset.isModifiedFromBaseline) {
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.60f),
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.preset_name_edited_format, preset.displayName()),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilledTonalButton(
-                        onClick = onRevertPresetToOriginal,
-                        shape = CircleShape,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier.defaultMinSize(minHeight = 30.dp)
-                    ) {
-                        Icon(LucideIcons.RotateCcw, contentDescription = null, modifier = Modifier.size(13.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = stringResource(R.string.action_revert_to_original),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            softWrap = false,
-                            maxLines = 1
-                        )
-                    }
-                    OutlinedButton(
-                        onClick = { showSaveAsDialog = true },
-                        shape = CircleShape,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier.defaultMinSize(minHeight = 30.dp)
-                    ) {
-                        Icon(LucideIcons.Save, contentDescription = null, modifier = Modifier.size(13.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = stringResource(R.string.action_save_as_new_short),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            softWrap = false,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
+        // Modified Common preset quick bar
+        AnimatedVisibility(visible = showCommonModifiedBar) {
+            EditorStatusActionBar(
+                title = stringResource(R.string.preset_name_edited_format, commonPreset.displayName()),
+                primaryLabel = stringResource(R.string.action_revert_to_original),
+                primaryIcon = LucideIcons.RotateCcw,
+                onPrimaryClick = onRevertCommonToOriginal,
+                secondaryLabel = stringResource(R.string.action_save_as_new_short),
+                secondaryIcon = LucideIcons.Save,
+                onSecondaryClick = { showSaveCommonAsDialog = true },
+            )
+        }
+
+        // Modified L/R preset quick bar
+        AnimatedVisibility(visible = showIndepModifiedBar) {
+            val indepName = activeSavedIndependent?.name.orEmpty()
+            EditorStatusActionBar(
+                title = stringResource(R.string.preset_name_edited_format, indepName),
+                primaryLabel = stringResource(R.string.action_revert_to_original),
+                primaryIcon = LucideIcons.RotateCcw,
+                onPrimaryClick = onRevertIndependentToOriginal,
+                secondaryLabel = stringResource(R.string.action_save_as_new_short),
+                secondaryIcon = LucideIcons.Save,
+                onSecondaryClick = { showSaveIndepAsDialog = true },
+            )
+        }
+
+        // Unsaved L/R draft quick bar (started from "No L/R")
+        AnimatedVisibility(visible = showDraftLrBar) {
+            EditorStatusActionBar(
+                title = stringResource(R.string.peq_draft_lr_banner),
+                primaryLabel = stringResource(R.string.action_discard_lr_draft),
+                primaryIcon = LucideIcons.X,
+                onPrimaryClick = onDiscardDraftIndependent,
+                secondaryLabel = stringResource(R.string.action_save_as_lr_preset),
+                secondaryIcon = LucideIcons.Save,
+                onSecondaryClick = { showSaveIndepAsDialog = true },
+            )
         }
 
         // Material 3 Expressive connected selector for Common / L / R
@@ -173,7 +174,15 @@ fun PeqEditorTab(
             )
         }
 
-        // Preamp Card
+        // Preamp Card (2-zone continuous slider: left 30% = -60..-24 dB, right 70% = -24..+12 dB)
+        val expressiveColors = LocalQuveExpressiveColorScheme.current ?: MaterialTheme.colorScheme
+        var showPreampNumericDialog by remember { mutableStateOf(false) }
+        val preampTitleText = if (editingTarget == PeqChannelTarget.COMMON) {
+            stringResource(R.string.preamp_common_title)
+        } else {
+            stringResource(R.string.preamp_channel_title, editingTarget.shortSegmentLabel())
+        }
+
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
@@ -188,11 +197,7 @@ fun PeqEditorTab(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (editingTarget == PeqChannelTarget.COMMON) {
-                            stringResource(R.string.preamp_common_title)
-                        } else {
-                            stringResource(R.string.preamp_channel_title, editingTarget.shortSegmentLabel())
-                        },
+                        text = preampTitleText,
                         style = MaterialTheme.typography.titleMedium,
                         softWrap = false,
                         maxLines = 1,
@@ -220,23 +225,58 @@ fun PeqEditorTab(
                             )
                         }
                     }
-                    Text(
-                        text = String.format(Locale.US, "%+.1f dB", preampDb),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        softWrap = false,
-                        maxLines = 1
-                    )
+                    Surface(
+                        color = expressiveColors.primaryContainer.copy(alpha = 0.65f),
+                        shape = CircleShape,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { showPreampNumericDialog = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = String.format(Locale.US, "%+.1f dB", preampDb),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = expressiveColors.onPrimaryContainer,
+                                softWrap = false,
+                                maxLines = 1
+                            )
+                            Icon(
+                                imageVector = LucideIcons.Pencil,
+                                contentDescription = stringResource(R.string.cd_numeric_input),
+                                tint = expressiveColors.onPrimaryContainer.copy(alpha = 0.78f),
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
                 }
                 Slider(
-                    value = preampDb.toFloat(),
-                    onValueChange = { raw ->
-                        val snapped = kotlin.math.round(raw * 10f) / 10.0
-                        onPreampChanged(editingTarget, snapped)
+                    value = preampDbToSliderPos(preampDb),
+                    onValueChange = { pos ->
+                        onPreampChanged(editingTarget, sliderPosToPreampDb(pos))
                     },
-                    valueRange = -24f..12f
+                    valueRange = 0f..1f
+                )
+                PreampSliderScaleRow(
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
+        }
+
+        if (showPreampNumericDialog) {
+            PreampNumericEditDialog(
+                title = preampTitleText,
+                initialDb = preampDb,
+                onDismiss = { showPreampNumericDialog = false },
+                onApply = { db ->
+                    onPreampChanged(editingTarget, clampPreampDb(db))
+                    showPreampNumericDialog = false
+                }
+            )
         }
 
         // Action bar above bands
@@ -307,15 +347,32 @@ fun PeqEditorTab(
         }
     }
 
-    if (showSaveAsDialog) {
+    if (showSaveCommonAsDialog) {
+        val activeLr = activeSavedIndependent ?: draftIndependent
         SaveAsNewPresetDialog(
-            sourcePreset = preset,
-            onDismiss = { showSaveAsDialog = false },
-            onConfirm = { newName, revertSource ->
-                onSaveModifiedAsNew(newName, revertSource)
-                showSaveAsDialog = false
+            sourcePreset = commonPreset,
+            activeIndependentName = activeLr?.takeIf { it.hasAnyFilterOrGain }?.name,
+            onDismiss = { showSaveCommonAsDialog = false },
+            onConfirm = { newName, revertSource, includeLr ->
+                onSaveCommonAsNew(newName, revertSource, includeLr)
+                showSaveCommonAsDialog = false
             }
         )
+    }
+
+    if (showSaveIndepAsDialog) {
+        val sourceIndep = activeSavedIndependent ?: draftIndependent
+        if (sourceIndep != null) {
+            SaveAsNewIndependentPresetDialog(
+                sourcePreset = sourceIndep,
+                isDraft = activeSavedIndependent == null,
+                onDismiss = { showSaveIndepAsDialog = false },
+                onConfirm = { newName, revertSource ->
+                    onSaveIndependentAsNew(newName, revertSource)
+                    showSaveIndepAsDialog = false
+                }
+            )
+        }
     }
 
     editingNumericBand?.let { band ->
@@ -327,6 +384,73 @@ fun PeqEditorTab(
                 editingNumericBand = null
             }
         )
+    }
+}
+
+@Composable
+private fun EditorStatusActionBar(
+    title: String,
+    primaryLabel: String,
+    primaryIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    onPrimaryClick: () -> Unit,
+    secondaryLabel: String,
+    secondaryIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    onSecondaryClick: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.60f),
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            FilledTonalButton(
+                onClick = onPrimaryClick,
+                shape = CircleShape,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.defaultMinSize(minHeight = 30.dp)
+            ) {
+                Icon(primaryIcon, contentDescription = null, modifier = Modifier.size(13.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = primaryLabel,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    softWrap = false,
+                    maxLines = 1
+                )
+            }
+            OutlinedButton(
+                onClick = onSecondaryClick,
+                shape = CircleShape,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.defaultMinSize(minHeight = 30.dp)
+            ) {
+                Icon(secondaryIcon, contentDescription = null, modifier = Modifier.size(13.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = secondaryLabel,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    softWrap = false,
+                    maxLines = 1
+                )
+            }
+        }
     }
 }
 
@@ -629,4 +753,160 @@ private fun formatFreq(hz: Double): String {
     } else {
         String.format(Locale.US, "%.1f Hz", hz)
     }
+}
+
+@Composable
+private fun PreampSliderScaleRow(modifier: Modifier = Modifier) {
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(
+        fontSize = 10.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+    )
+    val zeroStyle = labelStyle.copy(
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val zeroFraction = remember { preampDbToSliderPos(0.0) }
+    val ticks = remember(zeroFraction) {
+        listOf(
+            0f to "-60",
+            PREAMP_SLIDER_SPLIT_FRACTION to "-24",
+            zeroFraction to "0",
+            1f to "+12",
+        )
+    }
+    Layout(
+        modifier = modifier,
+        content = {
+            ticks.forEach { (_, text) ->
+                Text(
+                    text = text,
+                    style = if (text == "0") zeroStyle else labelStyle,
+                    softWrap = false,
+                    maxLines = 1,
+                )
+            }
+        }
+    ) { measurables, constraints ->
+        val insetPx = 10.dp.roundToPx()
+        val usableW = (constraints.maxWidth - insetPx * 2).coerceAtLeast(1)
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val placeables = measurables.map { it.measure(loose) }
+        val maxH = placeables.maxOfOrNull { it.height } ?: 0
+        layout(constraints.maxWidth, maxH) {
+            placeables.forEachIndexed { idx, placeable ->
+                val centerX = insetPx + (ticks[idx].first * usableW).roundToInt()
+                val x = (centerX - placeable.width / 2)
+                    .coerceIn(0, (constraints.maxWidth - placeable.width).coerceAtLeast(0))
+                placeable.placeRelative(x, 0)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PreampNumericEditDialog(
+    title: String,
+    initialDb: Double,
+    onDismiss: () -> Unit,
+    onApply: (Double) -> Unit,
+) {
+    var dbText by remember { mutableStateOf(String.format(Locale.US, "%.1f", initialDb)) }
+    val expressiveColors = LocalQuveExpressiveColorScheme.current ?: MaterialTheme.colorScheme
+
+    fun parseCurrent(): Double = dbText
+        .trim()
+        .replace(',', '.')
+        .toDoubleOrNull()
+        ?.let(::clampPreampDb)
+        ?: initialDb
+
+    fun applyDelta(delta: Double?) {
+        val next = if (delta == null) {
+            0.0
+        } else {
+            clampPreampDb(round((parseCurrent() + delta) * 10.0) / 10.0)
+        }
+        dbText = String.format(Locale.US, "%.1f", next)
+    }
+
+    GlassAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dialog_preamp_title, title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = stringResource(R.string.dialog_preamp_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = dbText,
+                    onValueChange = { dbText = it },
+                    label = { Text(stringResource(R.string.dialog_preamp_label)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = expressiveColors.primary,
+                        focusedLabelColor = expressiveColors.primary,
+                        cursorColor = expressiveColors.primary,
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                val quickSteps: List<Pair<String, Double?>> = listOf(
+                    "-5" to -5.0,
+                    "-1" to -1.0,
+                    "-0.1" to -0.1,
+                    "0 dB" to null,
+                    "+0.1" to 0.1,
+                    "+1" to 1.0,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    quickSteps.forEach { (label, delta) ->
+                        FilledTonalButton(
+                            onClick = { applyDelta(delta) },
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.defaultMinSize(minHeight = 30.dp)
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                softWrap = false,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val snapped = clampPreampDb(round(parseCurrent() * 10.0) / 10.0)
+                    onApply(snapped)
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = expressiveColors.primary,
+                    contentColor = expressiveColors.onPrimary
+                )
+            ) {
+                Icon(LucideIcons.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.action_apply), softWrap = false, maxLines = 1)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(contentColor = expressiveColors.primary)
+            ) {
+                Text(stringResource(R.string.action_cancel), softWrap = false, maxLines = 1)
+            }
+        }
+    )
 }

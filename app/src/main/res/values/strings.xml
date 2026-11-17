@@ -31,7 +31,7 @@
     <string name="shizuku_permission_needed">Permission</string>
     <string name="shizuku_stopped">Shizuku Off</string>
     <string name="cd_appearance_settings">Appearance &amp; Liquid Glass</string>
-    <string name="header_subtitle_format">64-bit Exclusive • %1$s</string>
+    <string name="header_subtitle_format">%1$s</string>
     <string name="badge_lr_swap">L⇄R Swap</string>
 
     <!-- Quick Dock -->
@@ -96,6 +96,9 @@
     <string name="dialog_freq_label">Center Frequency Fc (Hz)</string>
     <string name="dialog_gain_label">Gain (dB)</string>
     <string name="dialog_q_label">Q Factor</string>
+    <string name="dialog_preamp_title">Edit %1$s</string>
+    <string name="dialog_preamp_label">Preamp Gain (-60.0 to +12.0 dB)</string>
+    <string name="dialog_preamp_hint">Type an exact value or nudge in ±0.1 dB / ±1.0 dB / ±5.0 dB steps.</string>
 
     <!-- Preset Modified Tracking & Presets Tab -->
     <string name="preset_flat_name">Flat (0 dB)</string>
@@ -106,13 +109,41 @@
     <string name="action_revert_to_imported">Revert to Original</string>
     <string name="action_save_as_new_short">Save New</string>
     <string name="apo_card_title">Equalizer APO (.txt)</string>
-    <string name="apo_card_desc">Import &amp; export Equalizer APO files including Channel: L / Channel: R sections and per-preset L⇄R swap settings.</string>
+    <string name="apo_card_desc">Import &amp; export Equalizer APO files. Dual-channel files save as a bundle and register into L/R Presets.</string>
     <string name="action_import_file">Import File</string>
     <string name="action_paste_text">Paste Text</string>
     <string name="action_export_apo">Export APO</string>
     <string name="action_save_as_new">Save as New</string>
     <string name="saved_presets_title">Saved Presets (%1$d)</string>
+    <string name="saved_presets_desc">Stores Common-only and Common + L/R bundled presets. Common-only presets preserve your active L/R preset.</string>
     <string name="preset_summary_format">Common:%1$d(%2$+.1f) · L:%3$d(%4$+.1f) · R:%5$d(%6$+.1f) dB</string>
+    <string name="preset_summary_common_format">Common:%1$d(%2$+.1f dB)</string>
+    <string name="preset_summary_linked_lr_format">Common:%1$d(%2$+.1f) · L/R: %3$s</string>
+    <string name="preset_type_bundle">Bundle</string>
+    <string name="preset_type_common">Common Only</string>
+    <string name="preset_common_active_badge">Common Active</string>
+    <string name="lr_presets_title">L/R Presets (%1$d)</string>
+    <string name="lr_presets_desc">Channel-independent L &amp; R presets (driver matching, balance, etc.). Kept intact when switching Common presets.</string>
+    <string name="lr_preset_none_title">No L/R (0 dB)</string>
+    <string name="lr_preset_none_desc">Disables L/R independent EQ and preamp</string>
+    <string name="lr_preset_none_short">L/R Off</string>
+    <string name="lr_summary_format">L:%1$d(%2$+.1f) · R:%3$d(%4$+.1f dB)</string>
+    <string name="lr_draft_title">Unsaved L/R Edits</string>
+    <string name="lr_draft_default_name">Custom L/R</string>
+    <string name="action_save_as_lr_preset">Save L/R Preset</string>
+    <string name="action_discard_lr_draft">Discard</string>
+    <string name="dialog_save_lr_title">Save as New L/R Preset</string>
+    <string name="field_lr_preset_name">L/R Preset Name</string>
+    <string name="dialog_rename_lr_title">Rename L/R Preset</string>
+    <string name="dialog_delete_lr_title">Delete L/R Preset</string>
+    <string name="dialog_delete_lr_message">Delete L/R preset \"%1$s\"?</string>
+    <string name="dialog_delete_lr_linked_note">Delete L/R preset \"%1$s\"?\nLinked bundle preset(s) (%2$s) will become Common-only.</string>
+    <string name="dialog_save_as_include_lr">Include active L/R (%1$s) as bundle</string>
+    <string name="dialog_bundle_conflict_title">Change L/R Preset Too?</string>
+    <string name="dialog_bundle_conflict_message">\"%1$s\" includes L/R preset \"%2$s\", which differs from your active \"%3$s\".</string>
+    <string name="action_apply_common_only">Common Only</string>
+    <string name="action_apply_bundle_both">Change Both</string>
+    <string name="peq_draft_lr_banner">Unsaved L/R edits active</string>
     <string name="cd_preset_actions">Preset Actions</string>
     <string name="dialog_save_as_title">Save as New Preset</string>
     <string name="dialog_save_as_revert_source">Also revert \"%1$s\" to original</string>
@@ -131,7 +162,7 @@
     <!-- Routing Tab -->
     <string name="routing_preset_linked">Linked Preset: %1$s</string>
     <string name="routing_channel_swap_title">Channel Swap</string>
-    <string name="routing_channel_swap_on">L/R Reversed (saved per preset)</string>
+    <string name="routing_channel_swap_on">L/R Reversed (kept across preset changes)</string>
     <string name="routing_channel_swap_off">Standard (L→L, R→R)</string>
     <string name="routing_flow_off">Flow: In → Common PEQ → L/R Indep. PEQ (HW) → DAC</string>
     <string name="routing_flow_before">Flow: In → Common PEQ → [L⇄R Swap] → L/R Indep. PEQ (HW) → DAC</string>
@@ -142,10 +173,25 @@
     <string name="swap_pos_after_title">Swap after L/R independent PEQ (e.g., reversed cable)</string>
     <string name="swap_pos_after_detail">In LR → Common PEQ → L/R Indep. PEQ → [L⇄R Swap] → DAC\nIndependent PEQ runs on source channels before swapping final DAC output pins.</string>
     <string name="routing_rules_title">Output Device Auto-Switch (%1$d)</string>
-    <string name="routing_rules_desc">Monitors USB DAC, Bluetooth &amp; speaker changes and auto-applies the assigned preset (including its L⇄R swap state).</string>
+    <string name="routing_rules_desc">Monitors USB DAC, Bluetooth &amp; speaker changes and auto-applies Common/L/R presets and L⇄R swap rules.</string>
     <string name="rule_follow_manual_short">Manual Selection</string>
     <string name="rule_eq_off_short">EQ OFF (Bypass)</string>
     <string name="rule_preset_unselected">No Preset Selected</string>
+    <string name="rule_action_preset_short">Auto Preset</string>
+    <string name="rule_sheet_action_manual">Manual</string>
+    <string name="rule_sheet_action_preset">Preset</string>
+    <string name="rule_sheet_action_eq_off">EQ OFF</string>
+    <string name="rule_common_keep_manual">Keep Current Manual Common EQ</string>
+    <string name="rule_lr_keep_current">Keep Current L/R Setting</string>
+    <string name="rule_summary_keep_common">Common: Manual</string>
+    <string name="rule_summary_keep_lr">L/R: Keep</string>
+    <string name="rule_swap_section_title">L⇄R Channel Swap</string>
+    <string name="rule_swap_follow_manual">Manual</string>
+    <string name="rule_swap_force_off">Force OFF</string>
+    <string name="rule_swap_force_on">Force ON</string>
+    <string name="rule_sheet_tab_saved">Saved (%1$d)</string>
+    <string name="rule_sheet_tab_lr">L/R Presets (%1$d)</string>
+    <string name="rule_sheet_subtitle">Auto-switch presets &amp; L⇄R swap on connect</string>
     <string name="device_badge_active">Active Output</string>
     <string name="device_badge_connected">Connected</string>
     <string name="cd_remove_history">Remove History</string>
@@ -212,6 +258,13 @@
     <string name="banner_device_eq_off">%1$s connected: Auto EQ OFF (Bypassed)</string>
     <string name="banner_device_auto_preset">%1$s → Auto-applied \"%2$s\"</string>
     <string name="banner_preset_selected">Selected preset \"%1$s\"</string>
+    <string name="banner_bundle_selected">Applied \"%1$s\" + L/R \"%2$s\"</string>
+    <string name="banner_lr_selected">Applied L/R preset \"%1$s\"</string>
+    <string name="banner_lr_cleared">Cleared L/R preset (0 dB)</string>
+    <string name="banner_saved_new_lr_preset">Saved new L/R preset \"%1$s\"</string>
+    <string name="banner_deleted_lr_preset">L/R preset deleted</string>
+    <string name="banner_apo_imported_lr_preset">Imported L/R preset \"%1$s\" (L %2$d / R %3$d)</string>
+    <string name="lr_custom_fallback">Custom L/R</string>
     <string name="banner_auto_preamp_adjusted">Auto-adjusted Common Preamp to %1$.1f dB for 0 dB peak</string>
     <string name="banner_saved_new_preset">Saved new preset \"%1$s\"</string>
     <string name="banner_reverted_preset">Reverted \"%1$s\" to original</string>
@@ -234,7 +287,28 @@
     <string name="default_output_label">Default Output</string>
     <string name="connected_device_label">Connected Device</string>
 
-    <!-- App Bypass -->
+    <!-- App Bypass & Low Latency -->
+    <string name="low_latency_badge">LOW LAT</string>
+    <string name="low_latency_short_label">Low Latency</string>
+    <string name="routing_low_latency_title">Low-Latency Mode</string>
+    <string name="routing_low_latency_subtitle_on">Minimal queue buffering for games &amp; videos</string>
+    <string name="routing_low_latency_subtitle_off">Standard buffering for maximum glitch stability</string>
+    <string name="routing_low_latency_flow_global_on">Global Low Latency ON — 4 ms blocks &amp; active queue control (applies to all captured apps; Bypassed apps stay excluded)</string>
+    <string name="routing_low_latency_flow_per_app_on">Per-App Low Latency ACTIVE — Automatically engaged because a Low Latency app is playing audio</string>
+    <string name="routing_low_latency_flow_standard">Standard Mode ON — 10 ms blocks &amp; full stability buffer (apps set to Low Latency switch automatically on playback)</string>
+    <string name="app_mode_standard">Standard</string>
+    <string name="app_mode_bypass">Bypass</string>
+    <string name="app_mode_low_latency">Low Latency</string>
+    <string name="routing_app_rules_title">Per-App Audio Mode (%1$d)</string>
+    <string name="routing_app_rules_desc">Override individual apps cleanly: Standard (default EQ), Bypass (skip Quve completely), or Low Latency (auto-switch to minimal delay when playing).</string>
+    <string name="routing_app_rules_global_hint">Global Low Latency is ON: Standard apps also run in Low Latency (Bypass apps stay excluded).</string>
+    <string name="routing_app_rules_empty">All apps are set to Standard (default). Configure specific apps as Bypass or Low Latency anytime.</string>
+    <string name="action_select_app_rules">Configure Apps</string>
+    <string name="action_reset_all_standard">Reset All</string>
+    <string name="cd_reset_app_standard">Reset %1$s to Standard</string>
+    <string name="app_rules_picker_title">Per-App Audio Mode</string>
+    <string name="app_rules_picker_subtitle">%1$d configured (Low Latency %2$d • Bypass %3$d)</string>
+    <string name="app_rules_picker_subtitle_hint">Standard ⇄ Low Latency applies live • Bypass restarts loopback</string>
     <string name="routing_bypass_apps_title">App Bypass (%1$d)</string>
     <string name="routing_bypass_apps_desc">Selected apps skip Quve loopback capture and play directly through Android\'s standard audio path.</string>
     <string name="routing_bypass_apps_empty">No apps bypassed. All media &amp; game audio is processed by Quve.</string>
@@ -252,6 +326,19 @@
     <string name="bypass_uid_badge">UID %1$d</string>
     <string name="bypass_not_installed">Not installed</string>
     <string name="action_apply_count">Apply (%1$d)</string>
+    <string name="banner_global_low_latency_on">Global Low-Latency mode enabled</string>
+    <string name="banner_global_low_latency_off">Global Low-Latency mode disabled</string>
+    <string name="banner_app_rules_updated">Updated per-app audio modes (%1$d)</string>
+    <string name="banner_app_rules_cleared">Reset all apps to Standard</string>
     <string name="banner_bypass_apps_updated">Updated app bypass list (%1$d)</string>
     <string name="banner_bypass_apps_cleared">Cleared all bypassed apps</string>
+
+    <!-- Background Keep-Alive -->
+    <string name="routing_bg_persistence_title">Background EQ Keep-Alive</string>
+    <string name="routing_bg_persistence_subtitle_on">Keep DSP alive &amp; switch device rules even if app is killed</string>
+    <string name="routing_bg_persistence_subtitle_off">Standard lifecycle (EQ stops if OS kills the app process)</string>
+    <string name="routing_bg_persistence_desc_on">Shizuku DSP stays alive in daemon mode, autonomously monitors output device changes to apply per-device presets or Auto EQ OFF even while Quve is killed, and auto-recovers without audio dropout. Toggling while active briefly reconnects the engine.</string>
+    <string name="routing_bg_persistence_desc_off">Shizuku DSP stays bound to the Quve process so everything shuts down when killed. Turn ON if EQ stops working in the background. Toggling while active briefly reconnects the engine.</string>
+    <string name="banner_background_persistence_on">Background EQ Keep-Alive enabled (reconnecting engine)</string>
+    <string name="banner_background_persistence_off">Background EQ Keep-Alive disabled (reconnecting engine)</string>
 </resources>

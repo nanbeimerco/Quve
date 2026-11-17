@@ -200,6 +200,8 @@ fun QuveFloatingTopControls(
 fun QuveScrollableHeader(
     presetName: String,
     isPresetModified: Boolean = false,
+    independentPresetName: String? = null,
+    isIndependentModified: Boolean = false,
     channelSwap: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -237,17 +239,26 @@ fun QuveScrollableHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            val subtitlePresetName = if (isPresetModified) {
+            val commonPart = if (isPresetModified) {
                 stringResource(R.string.preset_name_edited_format, presetName)
             } else {
                 presetName
             }
+            val combinedText = if (!independentPresetName.isNullOrBlank()) {
+                val lrPart = if (isIndependentModified) {
+                    stringResource(R.string.preset_name_edited_format, independentPresetName)
+                } else {
+                    independentPresetName
+                }
+                "$commonPart • L/R: $lrPart"
+            } else {
+                commonPart
+            }
             Text(
-                text = stringResource(R.string.header_subtitle_format, subtitlePresetName),
+                text = stringResource(R.string.header_subtitle_format, combinedText),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                softWrap = false,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
             )

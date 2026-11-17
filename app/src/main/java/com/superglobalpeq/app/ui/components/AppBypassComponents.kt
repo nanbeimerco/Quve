@@ -61,8 +61,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superglobalpeq.app.R
+import com.superglobalpeq.app.model.AppAudioMode
 import com.superglobalpeq.app.model.AppBypassCandidate
-import com.superglobalpeq.app.model.BypassedAppItem
+import com.superglobalpeq.app.model.AppRuleItem
 import com.superglobalpeq.app.service.PeqEngineManager
 import com.superglobalpeq.app.ui.icons.LucideIcons
 import com.superglobalpeq.app.ui.theme.LocalQuveExpressiveColorScheme
@@ -144,11 +145,12 @@ fun AppIconBadge(
 }
 
 @Composable
-fun AppBypassSection(
-    bypassedApps: List<BypassedAppItem>,
+fun AppRoutingSection(
+    appRules: List<AppRuleItem>,
+    globalLowLatency: Boolean,
     onOpenPicker: () -> Unit,
-    onRemoveApp: (String) -> Unit,
-    onClearAll: () -> Unit,
+    onChangeAppMode: (String, AppAudioMode) -> Unit,
+    onResetAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -156,10 +158,10 @@ fun AppBypassSection(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         ExpressiveGroupTitle(
-            text = stringResource(R.string.routing_bypass_apps_title, bypassedApps.size)
+            text = stringResource(R.string.routing_app_rules_title, appRules.size)
         )
         Text(
-            text = stringResource(R.string.routing_bypass_apps_desc),
+            text = stringResource(R.string.routing_app_rules_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp)
@@ -191,21 +193,21 @@ fun AppBypassSection(
                         Icon(LucideIcons.Plus, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = stringResource(R.string.action_select_bypass_apps),
+                            text = stringResource(R.string.action_select_app_rules),
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
 
-                    if (bypassedApps.isNotEmpty()) {
+                    if (appRules.isNotEmpty()) {
                         OutlinedButton(
-                            onClick = onClearAll,
+                            onClick = onResetAll,
                             shape = CircleShape,
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
                         ) {
                             Text(
-                                text = stringResource(R.string.action_clear_all),
+                                text = stringResource(R.string.action_reset_all_standard),
                                 fontWeight = FontWeight.SemiBold,
                                 softWrap = false,
                                 maxLines = 1
@@ -214,7 +216,33 @@ fun AppBypassSection(
                     }
                 }
 
-                if (bypassedApps.isEmpty()) {
+                if (globalLowLatency) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = LucideIcons.Zap,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.routing_app_rules_global_hint),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                }
+
+                if (appRules.isEmpty()) {
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceContainerLowest,
                         shape = RoundedCornerShape(14.dp),
@@ -226,13 +254,13 @@ fun AppBypassSection(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Icon(
-                                imageVector = LucideIcons.ShieldOff,
+                                imageVector = LucideIcons.Layers,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = stringResource(R.string.routing_bypass_apps_empty),
+                                text = stringResource(R.string.routing_app_rules_empty),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -240,12 +268,12 @@ fun AppBypassSection(
                     }
                 } else {
                     ExpressiveGroup {
-                        bypassedApps.forEachIndexed { index, app ->
-                            BypassedAppRow(
+                        appRules.forEachIndexed { index, app ->
+                            AppRuleRow(
                                 rowIndex = index,
-                                rowCount = bypassedApps.size,
+                                rowCount = appRules.size,
                                 app = app,
-                                onRemove = { onRemoveApp(app.packageName) }
+                                onModeSelected = { mode -> onChangeAppMode(app.packageName, mode) }
                             )
                         }
                     }
@@ -256,101 +284,122 @@ fun AppBypassSection(
 }
 
 @Composable
-private fun BypassedAppRow(
+private fun AppRuleRow(
     rowIndex: Int,
     rowCount: Int,
-    app: BypassedAppItem,
-    onRemove: () -> Unit,
+    app: AppRuleItem,
+    onModeSelected: (AppAudioMode) -> Unit,
 ) {
-    val rowColor = ExpressiveGroupDefaults.containerColor()
-    Row(
+    val rowColor = when (app.mode) {
+        AppAudioMode.LOW_LATENCY -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
+        AppAudioMode.BYPASS -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
+        AppAudioMode.STANDARD -> ExpressiveGroupDefaults.containerColor()
+    }
+    val nonStandardModes = listOf(AppAudioMode.BYPASS, AppAudioMode.LOW_LATENCY)
+    val segmentLabels = listOf(
+        stringResource(R.string.app_mode_bypass),
+        stringResource(R.string.app_mode_low_latency),
+    )
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .expressiveItem(rowIndex, rowCount, rowColor)
             .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        AppIconBadge(packageName = app.packageName, size = 38.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            AppIconBadge(packageName = app.packageName, size = 38.dp)
 
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = app.displayName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                if (app.uid != null) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = CircleShape
-                    ) {
-                        Text(
-                            text = stringResource(R.string.bypass_uid_badge, app.uid),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            softWrap = false,
-                            maxLines = 1,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                        )
-                    }
-                } else {
-                    Surface(
-                        color = MaterialTheme.colorScheme.errorContainer,
-                        shape = CircleShape
-                    ) {
-                        Text(
-                            text = stringResource(R.string.bypass_not_installed),
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            softWrap = false,
-                            maxLines = 1,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                        )
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = app.displayName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (app.uid != null) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                text = stringResource(R.string.bypass_uid_badge, app.uid),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                softWrap = false,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                            )
+                        }
+                    } else {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                text = stringResource(R.string.bypass_not_installed),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                softWrap = false,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
+                Text(
+                    text = app.packageName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-            Text(
-                text = app.packageName,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+
+            IconButton(onClick = { onModeSelected(AppAudioMode.STANDARD) }) {
+                Icon(
+                    imageVector = LucideIcons.X,
+                    contentDescription = stringResource(R.string.cd_reset_app_standard, app.displayName),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
 
-        IconButton(onClick = onRemove) {
-            Icon(
-                imageVector = LucideIcons.X,
-                contentDescription = stringResource(R.string.cd_remove_bypass_app, app.displayName),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp)
-            )
-        }
+        ExpressiveSegmentBar(
+            labels = segmentLabels,
+            selectedIndex = nonStandardModes.indexOf(app.mode).coerceAtLeast(0),
+            onSelect = { idx -> onModeSelected(nonStandardModes[idx]) }
+        )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppBypassPickerSheet(
-    initialSelectedPackages: Set<String>,
+fun AppRoutingPickerSheet(
+    initialModes: Map<String, AppAudioMode>,
     onDismiss: () -> Unit,
-    onApply: (Set<String>) -> Unit,
+    onApply: (Map<String, AppAudioMode>) -> Unit,
 ) {
     val expressiveColors = LocalQuveExpressiveColorScheme.current ?: MaterialTheme.colorScheme
-    val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.80f).dp
+    val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.84f).dp
 
     var candidates by remember { mutableStateOf<List<AppBypassCandidate>?>(null) }
-    var draftSelected by remember(initialSelectedPackages) { mutableStateOf(initialSelectedPackages) }
+    var draftModes by remember(initialModes) { mutableStateOf(initialModes) }
     var searchQuery by remember { mutableStateOf("") }
     var filterTabIndex by remember { mutableIntStateOf(0) } // 0 = standard, 1 = all (+system)
 
@@ -358,7 +407,7 @@ fun AppBypassPickerSheet(
         candidates = PeqEngineManager.loadBypassCandidateApps()
     }
 
-    val displayedApps = remember(candidates, searchQuery, filterTabIndex, initialSelectedPackages) {
+    val displayedApps = remember(candidates, searchQuery, filterTabIndex, initialModes) {
         val list = candidates ?: return@remember emptyList()
         val query = searchQuery.trim().lowercase(Locale.ROOT)
         list.asSequence()
@@ -366,19 +415,28 @@ fun AppBypassPickerSheet(
                 val passesCategory = filterTabIndex == 1 ||
                     !app.isSystemApp ||
                     app.hasLauncherEntry ||
-                    app.packageName in initialSelectedPackages
+                    app.packageName in initialModes
                 val passesSearch = query.isEmpty() ||
                     app.label.lowercase(Locale.ROOT).contains(query) ||
                     app.packageName.lowercase(Locale.ROOT).contains(query)
                 passesCategory && passesSearch
             }
             .sortedWith(
-                compareByDescending<AppBypassCandidate> { it.packageName in initialSelectedPackages }
+                compareByDescending<AppBypassCandidate> { it.packageName in initialModes }
                     .thenBy { it.label.lowercase(Locale.ROOT) }
                     .thenBy { it.packageName }
             )
             .toList()
     }
+
+    val configuredCount = draftModes.size
+    val lowLatencyCount = draftModes.values.count { it == AppAudioMode.LOW_LATENCY }
+    val bypassCount = draftModes.values.count { it == AppAudioMode.BYPASS }
+    val modeLabels = listOf(
+        stringResource(R.string.app_mode_standard),
+        stringResource(R.string.app_mode_bypass),
+        stringResource(R.string.app_mode_low_latency),
+    )
 
     GlassModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -402,7 +460,7 @@ fun AppBypassPickerSheet(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = LucideIcons.ShieldOff,
+                            imageVector = LucideIcons.Zap,
                             contentDescription = null,
                             tint = expressiveColors.onPrimaryContainer,
                             modifier = Modifier.size(20.dp)
@@ -411,16 +469,28 @@ fun AppBypassPickerSheet(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = stringResource(R.string.bypass_picker_title),
+                        text = stringResource(R.string.app_rules_picker_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = stringResource(R.string.bypass_picker_subtitle, draftSelected.size),
+                        text = stringResource(
+                            R.string.app_rules_picker_subtitle,
+                            configuredCount,
+                            lowLatencyCount,
+                            bypassCount
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = stringResource(R.string.app_rules_picker_subtitle_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = expressiveColors.primary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -516,71 +586,72 @@ fun AppBypassPickerSheet(
                                 items = displayedApps,
                                 key = { _, item -> item.packageName }
                             ) { index, app ->
-                                val selected = app.packageName in draftSelected
-                                val rowBg = if (selected) {
-                                    expressiveColors.primaryContainer.copy(alpha = 0.48f)
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerLow
+                                val mode = draftModes[app.packageName] ?: AppAudioMode.STANDARD
+                                val rowBg = when (mode) {
+                                    AppAudioMode.LOW_LATENCY -> expressiveColors.primaryContainer.copy(alpha = 0.36f)
+                                    AppAudioMode.BYPASS -> expressiveColors.secondaryContainer.copy(alpha = 0.45f)
+                                    AppAudioMode.STANDARD -> MaterialTheme.colorScheme.surfaceContainerLow
                                 }
-                                Row(
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .expressiveItem(index, displayedApps.size, rowBg)
-                                        .clickable {
-                                            draftSelected = if (selected) {
-                                                draftSelected - app.packageName
-                                            } else {
-                                                draftSelected + app.packageName
-                                            }
-                                        }
                                         .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    AppIconBadge(packageName = app.packageName, size = 36.dp)
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            Text(
-                                                text = app.label,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.SemiBold,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.weight(1f, fill = false)
-                                            )
-                                            Surface(
-                                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                                shape = CircleShape
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        AppIconBadge(packageName = app.packageName, size = 36.dp)
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                                             ) {
                                                 Text(
-                                                    text = stringResource(R.string.bypass_uid_badge, app.uid),
-                                                    fontSize = 10.sp,
+                                                    text = app.label,
+                                                    style = MaterialTheme.typography.bodyMedium,
                                                     fontWeight = FontWeight.SemiBold,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    softWrap = false,
                                                     maxLines = 1,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.weight(1f, fill = false)
                                                 )
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                    shape = CircleShape
+                                                ) {
+                                                    Text(
+                                                        text = stringResource(R.string.bypass_uid_badge, app.uid),
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        softWrap = false,
+                                                        maxLines = 1,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
                                             }
+                                            Text(
+                                                text = app.packageName,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
                                         }
-                                        Text(
-                                            text = app.packageName,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
                                     }
-                                    QuveExpressiveSwitch(
-                                        checked = selected,
-                                        onCheckedChange = { checked ->
-                                            draftSelected = if (checked) {
-                                                draftSelected + app.packageName
+
+                                    ExpressiveSegmentBar(
+                                        labels = modeLabels,
+                                        selectedIndex = mode.ordinal,
+                                        onSelect = { idx ->
+                                            val chosen = AppAudioMode.entries[idx]
+                                            draftModes = if (chosen == AppAudioMode.STANDARD) {
+                                                draftModes - app.packageName
                                             } else {
-                                                draftSelected - app.packageName
+                                                draftModes + (app.packageName to chosen)
                                             }
                                         }
                                     )
@@ -601,7 +672,7 @@ fun AppBypassPickerSheet(
                     Text(stringResource(R.string.action_cancel), maxLines = 1, softWrap = false)
                 }
                 Button(
-                    onClick = { onApply(draftSelected) },
+                    onClick = { onApply(draftModes) },
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = expressiveColors.primary,
@@ -612,7 +683,11 @@ fun AppBypassPickerSheet(
                     Icon(LucideIcons.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = stringResource(R.string.action_apply_count, draftSelected.size),
+                        text = if (configuredCount > 0) {
+                            stringResource(R.string.action_apply_count, configuredCount)
+                        } else {
+                            stringResource(R.string.action_apply)
+                        },
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         softWrap = false

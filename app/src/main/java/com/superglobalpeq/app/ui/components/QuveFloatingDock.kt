@@ -71,7 +71,7 @@ enum class QuveTab(
 ) {
     PEQ(R.string.tab_peq, LucideIcons.SlidersHorizontal),
     PRESETS(R.string.tab_presets, LucideIcons.Layers),
-    ROUTING(R.string.tab_routing, LucideIcons.ArrowLeftRight),
+    ROUTING(R.string.tab_routing, LucideIcons.Route),
 }
 
 @Composable
@@ -323,15 +323,19 @@ private fun QuveQuickControlBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
+                    val commonShownName = if (uiState.activeCommonPreset.isCommonModifiedFromBaseline) {
+                        stringResource(
+                            R.string.preset_name_edited_format,
+                            uiState.activeCommonPreset.displayName(),
+                        )
+                    } else {
+                        uiState.activeCommonPreset.displayName()
+                    }
+                    val titleLine = uiState.activeIndependentPreset?.let { indep ->
+                        "$commonShownName + L/R: ${indep.name}"
+                    } ?: commonShownName
                     Text(
-                        text = if (uiState.activePreset.isModifiedFromBaseline) {
-                            stringResource(
-                                R.string.preset_name_edited_format,
-                                uiState.activePreset.displayName(),
-                            )
-                        } else {
-                            uiState.activePreset.displayName()
-                        },
+                        text = titleLine,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = contentColor,
@@ -350,6 +354,24 @@ private fun QuveQuickControlBar(
                         ) {
                             Text(
                                 text = "L⇄R",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                softWrap = false,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                    if (activeRunning && uiState.telemetry.lowLatencyActive) {
+                        Box(
+                            modifier = Modifier
+                                .foldAway(narrow, horizontal = true)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.low_latency_badge),
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.primary,

@@ -49,6 +49,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -73,14 +74,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superglobalpeq.app.data.QuveSettings
+import com.superglobalpeq.app.model.BundleSelectionOutcome
 import com.superglobalpeq.app.model.DeviceCategory
+import com.superglobalpeq.app.model.EqPreset
+import com.superglobalpeq.app.model.IndependentPeqPreset
 import com.superglobalpeq.app.model.PeqChannelTarget
 import com.superglobalpeq.app.service.AppUiState
 import com.superglobalpeq.app.service.PeqEngineManager
 import com.superglobalpeq.app.service.ShizukuStatus
-import com.superglobalpeq.app.ui.components.AppBypassPickerSheet
+import com.superglobalpeq.app.ui.components.AppRoutingPickerSheet
 import com.superglobalpeq.app.ui.components.AppearanceSettingsSheet
 import com.superglobalpeq.app.ui.components.BottomFadeScrim
+import com.superglobalpeq.app.ui.components.BundlePresetConflictDialog
 import com.superglobalpeq.app.ui.components.FloatingBarsTapGuard
 import com.superglobalpeq.app.ui.components.FrequencyResponseGraphCard
 import com.superglobalpeq.app.ui.components.GlassAlertDialog
@@ -125,9 +130,24 @@ fun MainScreen() {
     val coroutineScope = rememberCoroutineScope()
     var currentTab by rememberSaveable { mutableStateOf(QuveTab.PEQ) }
     var pasteDialog by remember { mutableStateOf<PasteDialogState?>(null) }
+    var pendingImportConflict by remember { mutableStateOf<Pair<EqPreset, IndependentPeqPreset>?>(null) }
     var showAppearanceSheet by rememberSaveable { mutableStateOf(false) }
     var showBypassPickerSheet by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+
+    fun handleApoImportResult(result: PeqEngineManager.ApoImportResult) {
+        val importedPreset = result.importedPreset ?: return
+        val eval = result.selectionEvaluation ?: return
+        if (eval.outcome == BundleSelectionOutcome.PROMPT_COMMON_OR_BOTH) {
+            val latestIndepList = PeqEngineManager.uiState.value.independentPresets
+            val targetIndep = latestIndepList.firstOrNull { it.id == eval.targetIndependentPresetId }
+            if (targetIndep != null) {
+                pendingImportConflict = importedPreset to targetIndep
+            } else {
+                PeqEngineManager.selectSavedPreset(importedPreset.id, applyIndependentToo = false)
+            }
+        }
+    }
 
     val lockExpanded by QuveSettings.lockBottomBarExpanded.collectAsState()
     val reduceDynamicBlur by QuveSettings.reduceDynamicBlur.collectAsState()
@@ -186,7 +206,7 @@ fun MainScreen() {
                     ?.bufferedReader()
                     ?.use { it.readText() }
                     ?: ""
-                PeqEngineManager.importApoAsNewPreset(content, displayName)
+                handleApoImportResult(PeqEngineManager.importApoAsNewPreset(content, displayName))
             }
         }
     }
@@ -241,8 +261,10 @@ fun MainScreen() {
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         QuveScrollableHeader(
-                            presetName = uiState.activePreset.displayName(),
-                            isPresetModified = uiState.activePreset.isModifiedFromBaseline,
+                            presetName = uiState.activeCommonPreset.displayName(),
+                            isPresetModified = uiState.activeCommonPreset.isCommonModifiedFromBaseline,
+                            independentPresetName = uiState.activeIndependentPreset?.name,
+                            isIndependentModified = uiState.activeSavedIndependentPreset?.isModifiedFromBaseline == true,
                             channelSwap = uiState.channelSwap,
                         )
 
@@ -266,6 +288,9 @@ fun MainScreen() {
 
                                 PeqEditorTab(
                                     preset = uiState.activePreset,
+                                    commonPreset = uiState.activeCommonPreset,
+                                    activeSavedIndependent = uiState.activeSavedIndependentPreset,
+                                    draftIndependent = uiState.draftIndependentPreset,
                                     editingTarget = uiState.editingTarget,
                                     onSelectTarget = { PeqEngineManager.selectEditingTarget(it) },
                                     onPreampChanged = { t, db -> PeqEngineManager.setTargetPreamp(t, db) },
@@ -274,15 +299,29 @@ fun MainScreen() {
                                     onUpdateBand = { t, b -> PeqEngineManager.updateBand(t, b) },
                                     onRemoveBand = { t, id -> PeqEngineManager.removeBand(t, id) },
                                     onOpenSectionPasteDialog = { t -> pasteDialog = PasteDialogState(t) },
-                                    onRevertPresetToOriginal = {
-                                        PeqEngineManager.revertPresetToBaseline(uiState.activePreset.id)
+                                    onRevertCommonToOriginal = {
+                                        PeqEngineManager.revertPresetToBaseline(uiState.activeCommonPreset.id)
                                     },
-                                    onSaveModifiedAsNew = { newName, revertSource ->
+                                    onSaveCommonAsNew = { newName, revertSource, includeLr ->
                                         PeqEngineManager.saveAsNewPreset(
                                             newName = newName,
-                                            sourcePresetId = uiState.activePreset.id,
+                                            sourcePresetId = uiState.activeCommonPreset.id,
                                             revertSourceToBaseline = revertSource,
+                                            includeActiveIndependent = includeLr
                                         )
+                                    },
+                                    onRevertIndependentToOriginal = {
+                                        PeqEngineManager.revertIndependentPresetToBaseline()
+                                    },
+                                    onSaveIndependentAsNew = { newName, revertSource ->
+                                        PeqEngineManager.saveAsNewIndependentPreset(
+                                            newName = newName,
+                                            sourceIndependentId = uiState.selectedIndependentPresetId,
+                                            revertSourceToBaseline = revertSource
+                                        )
+                                    },
+                                    onDiscardDraftIndependent = {
+                                        PeqEngineManager.discardDraftIndependent()
                                     },
                                 )
                             }
@@ -290,23 +329,42 @@ fun MainScreen() {
                             QuveTab.PRESETS -> PresetsTab(
                                 presets = uiState.presets,
                                 selectedPresetId = uiState.selectedPresetId,
-                                activePreset = uiState.activePreset,
-                                onSelectPreset = { PeqEngineManager.selectPreset(it) },
-                                onRevertPresetToOriginal = { PeqEngineManager.revertPresetToBaseline(it) },
-                                onSaveAsNew = { newName, sourceId, revertSource ->
+                                activeCommonPreset = uiState.activeCommonPreset,
+                                independentPresets = uiState.independentPresets,
+                                selectedIndependentPresetId = uiState.selectedIndependentPresetId,
+                                draftIndependentPreset = uiState.draftIndependentPreset,
+                                onSelectSavedPreset = { id, applyLrToo ->
+                                    PeqEngineManager.selectSavedPreset(id, applyLrToo)
+                                },
+                                onRevertCommonPreset = { PeqEngineManager.revertPresetToBaseline(it) },
+                                onSaveCommonAsNew = { newName, sourceId, revertSource, includeLr ->
                                     PeqEngineManager.saveAsNewPreset(
                                         newName = newName,
                                         sourcePresetId = sourceId,
                                         revertSourceToBaseline = revertSource,
+                                        includeActiveIndependent = includeLr
                                     )
                                 },
                                 onRenamePreset = { id, name -> PeqEngineManager.renamePreset(id, name) },
                                 onDuplicatePreset = { PeqEngineManager.duplicatePreset(it) },
                                 onDeletePreset = { PeqEngineManager.deletePreset(it) },
+                                onSelectIndependentPreset = { PeqEngineManager.selectIndependentPreset(it) },
+                                onRevertIndependentPreset = { PeqEngineManager.revertIndependentPresetToBaseline(it) },
+                                onSaveIndependentAsNew = { newName, sourceId, revertSource ->
+                                    PeqEngineManager.saveAsNewIndependentPreset(
+                                        newName = newName,
+                                        sourceIndependentId = sourceId,
+                                        revertSourceToBaseline = revertSource
+                                    )
+                                },
+                                onDiscardDraftIndependent = { PeqEngineManager.discardDraftIndependent() },
+                                onRenameIndependentPreset = { id, name -> PeqEngineManager.renameIndependentPreset(id, name) },
+                                onDuplicateIndependentPreset = { PeqEngineManager.duplicateIndependentPreset(it) },
+                                onDeleteIndependentPreset = { PeqEngineManager.deleteIndependentPreset(it) },
                                 onImportApoFile = { openDocLauncher.launch(arrayOf("text/plain", "*/*")) },
                                 onOpenPasteApoModal = { pasteDialog = PasteDialogState(null) },
                                 onExportApoFile = {
-                                    val safeName = uiState.activePreset.name
+                                    val safeName = uiState.activeCommonPreset.name
                                         .replace(Regex("""[^\w\- ]+"""), "_")
                                         .trim()
                                         .ifEmpty { "preset" }
@@ -315,21 +373,28 @@ fun MainScreen() {
                             )
 
                             QuveTab.ROUTING -> RoutingTab(
-                                activePresetName = uiState.activePreset.displayName(),
-                                activePresetEdited = uiState.activePreset.isModifiedFromBaseline,
                                 channelSwap = uiState.channelSwap,
                                 swapPosition = uiState.swapPosition,
                                 onChannelSwapChanged = { en, pos -> PeqEngineManager.setChannelSwap(en, pos) },
+                                globalLowLatency = uiState.globalLowLatency,
+                                lowLatencyActive = uiState.telemetry.lowLatencyActive,
+                                perAppLowLatencyActive = uiState.telemetry.perAppLowLatencyActive,
+                                onGlobalLowLatencyChanged = { PeqEngineManager.setGlobalLowLatency(it) },
+                                backgroundPersistenceEnabled = uiState.backgroundPersistenceEnabled,
+                                onBackgroundPersistenceChanged = { PeqEngineManager.setBackgroundPersistenceEnabled(it) },
                                 connectedDevices = uiState.connectedDevices,
                                 activeDevice = uiState.activeDevice,
                                 deviceRules = uiState.deviceRules,
                                 presets = uiState.presets,
-                                onUpdateDeviceRule = { k, a, pid -> PeqEngineManager.updateDeviceRule(k, a, pid) },
+                                independentPresets = uiState.independentPresets,
+                                onUpdateDeviceRule = { k, a, pid, indepA, indepPid, swapA ->
+                                    PeqEngineManager.updateDeviceRule(k, a, pid, indepA, indepPid, swapA)
+                                },
                                 onRemoveDeviceRule = { PeqEngineManager.removeDeviceRule(it) },
-                                bypassedApps = uiState.bypassedApps,
-                                onOpenBypassAppPicker = { showBypassPickerSheet = true },
-                                onRemoveBypassApp = { PeqEngineManager.removeBypassedPackage(it) },
-                                onClearBypassApps = { PeqEngineManager.clearBypassedPackages() }
+                                appRules = uiState.appRules,
+                                onOpenAppRulePicker = { showBypassPickerSheet = true },
+                                onChangeAppMode = { pkg, mode -> PeqEngineManager.setAppAudioMode(pkg, mode) },
+                                onResetAppRules = { PeqEngineManager.clearAppAudioModes() }
                             )
                         }
 
@@ -432,12 +497,12 @@ fun MainScreen() {
         }
 
         if (showBypassPickerSheet) {
-            AppBypassPickerSheet(
-                initialSelectedPackages = uiState.bypassedPackages,
+            AppRoutingPickerSheet(
+                initialModes = uiState.appAudioModes,
                 onDismiss = { showBypassPickerSheet = false },
-                onApply = { selectedPackages ->
+                onApply = { selectedModes ->
                     showBypassPickerSheet = false
-                    PeqEngineManager.setBypassedPackages(selectedPackages)
+                    PeqEngineManager.setAppAudioModes(selectedModes)
                 }
             )
         }
@@ -447,12 +512,31 @@ fun MainScreen() {
                 sectionTarget = dlg.sectionTarget,
                 onDismiss = { pasteDialog = null },
                 onImportWholePreset = { text, name ->
-                    PeqEngineManager.importApoAsNewPreset(text, name)
+                    handleApoImportResult(PeqEngineManager.importApoAsNewPreset(text, name))
                     pasteDialog = null
                 },
                 onImportSection = { text, target ->
                     PeqEngineManager.importApoIntoCurrentTarget(text, target)
                     pasteDialog = null
+                }
+            )
+        }
+
+        pendingImportConflict?.let { (bundlePreset, bundleIndep) ->
+            val currentLrName = uiState.activeIndependentPreset?.name
+                ?: stringResource(R.string.lr_preset_none_title)
+            BundlePresetConflictDialog(
+                bundleName = bundlePreset.displayName(),
+                bundleLrName = bundleIndep.name,
+                currentLrName = currentLrName,
+                onDismiss = { pendingImportConflict = null },
+                onCommonOnly = {
+                    pendingImportConflict = null
+                    PeqEngineManager.selectSavedPreset(bundlePreset.id, applyIndependentToo = false)
+                },
+                onBoth = {
+                    pendingImportConflict = null
+                    PeqEngineManager.selectSavedPreset(bundlePreset.id, applyIndependentToo = true)
                 }
             )
         }
@@ -580,6 +664,22 @@ private fun EngineHeroCard(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
+                        if (uiState.telemetry.lowLatencyActive) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
+                                shape = CircleShape
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.low_latency_badge),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    softWrap = false,
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
                         Text(
                             text = "48kHz / 64-bit",
                             fontSize = 11.sp,

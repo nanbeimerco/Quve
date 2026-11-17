@@ -571,4 +571,42 @@ object LucideIcons {
             }
         }
     }
+
+    val Zap: ImageVector by lazy {
+        lucideIcon("Zap") { s, w ->
+            strokePath(s, w) {
+                moveTo(13f, 2f)
+                lineTo(3f, 14f)
+                horizontalLineTo(12f)
+                lineTo(11f, 22f)
+                lineTo(21f, 10f)
+                horizontalLineTo(12f)
+                close()
+            }
+        }
+    }
+
+    val Route: ImageVector by lazy {
+        lucideIcon("Route") { s, w ->
+            strokePath(s, w) {
+                // Start endpoint circle (cx=6, cy=19, r=3)
+                moveTo(9f, 19f)
+                arcTo(3f, 3f, 0f, true, true, 3f, 19f)
+                arcTo(3f, 3f, 0f, true, true, 9f, 19f)
+                close()
+                // S-curve routing path
+                moveTo(9f, 19f)
+                horizontalLineTo(17.5f)
+                arcTo(3.5f, 3.5f, 0f, false, false, 17.5f, 12f)
+                horizontalLineTo(6.5f)
+                arcTo(3.5f, 3.5f, 0f, false, true, 6.5f, 5f)
+                horizontalLineTo(15f)
+                // End endpoint circle (cx=18, cy=5, r=3)
+                moveTo(21f, 5f)
+                arcTo(3f, 3f, 0f, true, true, 15f, 5f)
+                arcTo(3f, 3f, 0f, true, true, 21f, 5f)
+                close()
+            }
+        }
+    }
 }

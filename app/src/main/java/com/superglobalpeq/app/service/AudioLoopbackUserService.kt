@@ -5,23 +5,34 @@ import android.content.AttributionSource
 import android.content.Context
 import android.content.ContextWrapper
 import android.media.AudioAttributes
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioPlaybackConfiguration
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
 import android.os.Process
+import android.os.SystemClock
 import android.util.Log
 import com.superglobalpeq.app.dsp.StereoPeqProcessor
 import com.superglobalpeq.app.model.ActiveDspConfig
+import com.superglobalpeq.app.model.AutonomousDevicePolicy
 import com.superglobalpeq.app.model.EqPreset
+import com.superglobalpeq.app.model.IndependentPeqPreset
 import com.superglobalpeq.app.model.mergeExcludedUids
+import com.superglobalpeq.app.model.resolveDeviceRoutingOutcome
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
+import java.lang.reflect.Method
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -70,6 +81,21 @@ internal fun isStaleSiblingPeqServiceProcess(
     return processName == expectedProcessName
 }
 
+internal fun normalizeUserExcludedUids(
+    serviceUid: Int,
+    clientAppUid: Int,
+    extraExcludedUids: IntArray?
+): IntArray {
+    if (extraExcludedUids == null || extraExcludedUids.isEmpty()) return IntArray(0)
+    val out = HashSet<Int>(extraExcludedUids.size)
+    for (uid in extraExcludedUids) {
+        if (uid > 0 && uid != serviceUid && uid != clientAppUid) {
+            out.add(uid)
+        }
+    }
+    return out.toIntArray().apply { sort() }
+}
+
 /**
  * Runs inside Shizuku's UID 2000 (com.android.shell) process via UserService.
  * Uses ROUTE_FLAG_LOOP_BACK (without RENDER) + RULE_MATCH_UID exclusion on UID 2000
@@ -85,7 +111,12 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
         private const val ROUTE_FLAG_LOOP_BACK = 0x1 shl 1
         private const val AUDIO_MANAGER_SUCCESS = 0
         private const val SAMPLE_RATE = 48000
-        private const val BLOCK_SHORTS = 480 * 2 // 10 ms @ 48 kHz stereo PCM_16BIT
+        private const val BLOCK_SHORTS_STANDARD = 480 * 2 // 10 ms @ 48 kHz stereo PCM_16BIT
+        private const val BLOCK_SHORTS_LOW_LATENCY = 192 * 2 // 4 ms @ 48 kHz (matches FastMixer HAL burst)
+        // Kept > DEFAULT_HIGH_WATER_FRAMES (1440) so LatencyQueueController sheds excess before track.write blocks.
+        private const val LOW_LATENCY_TRACK_BUFFER_FRAMES = 2304 // 48 ms @ 48 kHz (12 * 192)
+        private const val PER_APP_HOLD_OFF_MS = 1200L
+        private const val PLAYER_STATE_STARTED = 2
         private const val SIGNAL_SIGTERM = 15
         private const val SIGNAL_SIGKILL = 9
     }
@@ -149,6 +180,9 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
     private var excludedUidCount: Int = 0
 
     @Volatile
+    private var activeUserExcludedUids: IntArray = IntArray(0)
+
+    @Volatile
     private var inPeakDbfs: Double = -120.0
 
     @Volatile
@@ -161,6 +195,93 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
     private var outRmsDbfs: Double = -120.0
 
     private val framesProcessed = AtomicLong(0L)
+    private val lowLatencyDroppedBlocks = AtomicLong(0L)
+    private val queueController = LatencyQueueController()
+    private val playbackLock = Any()
+
+    @Volatile
+    private var globalLowLatencyEnabled: Boolean = false
+
+    @Volatile
+    private var lowLatencyUidSet: Set<Int> = emptySet()
+
+    @Volatile
+    private var perAppLowLatencyActive: Boolean = false
+
+    @Volatile
+    private var perAppHoldOffUntilMs: Long = 0L
+
+    @Volatile
+    private var lastQueuedFrames: Long = 0L
+
+    @Volatile
+    private var currentTrackBufferFrames: Int = 0
+
+    @Volatile
+    private var playbackCallback: AudioManager.AudioPlaybackCallback? = null
+
+    @Volatile
+    private var playbackHandlerThread: HandlerThread? = null
+
+    private val deviceMonitorLock = Any()
+
+    @Volatile
+    private var deviceMonitorRegistered: Boolean = false
+
+    @Volatile
+    private var deviceMonitorCallback: AudioDeviceCallback? = null
+
+    @Volatile
+    private var deviceMonitorThread: HandlerThread? = null
+
+    @Volatile
+    private var deviceMonitorHandler: Handler? = null
+
+    private val delayedDeviceEvalRunnable = Runnable {
+        evaluateAutonomousDeviceChange()
+    }
+
+    @Volatile
+    private var savedClientAppUid: Int = -1
+
+    @Volatile
+    private var savedRawExcludedUids: IntArray = IntArray(0)
+
+    @Volatile
+    private var autonomousPolicy: AutonomousDevicePolicy? = null
+
+    @Volatile
+    private var autonomousLastDeviceKey: String? = null
+
+    @Volatile
+    private var autonomousCurrentCommonId: String = ""
+
+    @Volatile
+    private var autonomousCurrentIndepId: String? = null
+
+    @Volatile
+    private var autonomousCurrentDraftIndep: IndependentPeqPreset? = null
+
+    @Volatile
+    private var autonomousCurrentSwap: Boolean = false
+
+    @Volatile
+    private var autonomousPausedByRule: Boolean = false
+
+    @Volatile
+    private var autonomousSwitchCount: Int = 0
+
+    private val playbackGetClientUidMethod: Method? by lazy {
+        runCatching { AudioPlaybackConfiguration::class.java.getMethod("getClientUid") }.getOrNull()
+    }
+
+    private val playbackIsActiveMethod: Method? by lazy {
+        runCatching { AudioPlaybackConfiguration::class.java.getMethod("isActive") }.getOrNull()
+    }
+
+    private val playbackGetPlayerStateMethod: Method? by lazy {
+        runCatching { AudioPlaybackConfiguration::class.java.getMethod("getPlayerState") }.getOrNull()
+    }
 
     init {
         Runtime.getRuntime().addShutdownHook(Thread({
@@ -254,25 +375,62 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
     override fun startLoopback(
         clientAppUid: Int,
         excludedUids: IntArray?,
+        globalLowLatency: Boolean,
+        lowLatencyUids: IntArray?,
         dspConfigJson: String
     ): Boolean {
         synchronized(stateLock) {
-            stopInternal()
-            terminateStaleSiblingServices()
-            lastError = null
-            excludedUidCount = 0
-            framesProcessed.set(0L)
-            inPeakDbfs = -120.0
-            inRmsDbfs = -120.0
-            outPeakDbfs = -120.0
-            outRmsDbfs = -120.0
+            val parsedConfig = try {
+                ActiveDspConfig.fromJsonString(dspConfigJson)
+            } catch (t: Throwable) {
+                Log.e(TAG, "startLoopback config parse failed", t)
+                lastError = "${t.javaClass.simpleName}: ${t.message}"
+                return false
+            }
+            return startLoopbackLocked(
+                clientAppUid = clientAppUid,
+                excludedUids = excludedUids,
+                globalLowLatency = globalLowLatency,
+                lowLatencyUids = lowLatencyUids,
+                parsedConfig = parsedConfig
+            )
+        }
+    }
 
-            return try {
-                val parsed = ActiveDspConfig.fromJsonString(dspConfigJson)
-                processor.resetStates()
-                processor.updateConfig(parsed)
+    private fun startLoopbackLocked(
+        clientAppUid: Int,
+        excludedUids: IntArray?,
+        globalLowLatency: Boolean,
+        lowLatencyUids: IntArray?,
+        parsedConfig: ActiveDspConfig
+    ): Boolean {
+        savedClientAppUid = clientAppUid
+        savedRawExcludedUids = excludedUids?.copyOf() ?: IntArray(0)
+        stopInternal()
+        terminateStaleSiblingServices()
+        lastError = null
+        excludedUidCount = 0
+        framesProcessed.set(0L)
+        lowLatencyDroppedBlocks.set(0L)
+        lastQueuedFrames = 0L
+        currentTrackBufferFrames = 0
+        queueController.reset()
+        inPeakDbfs = -120.0
+        inRmsDbfs = -120.0
+        outPeakDbfs = -120.0
+        outRmsDbfs = -120.0
+        globalLowLatencyEnabled = globalLowLatency
+        lowLatencyUidSet = lowLatencyUids?.toHashSet() ?: emptySet()
+        perAppLowLatencyActive = false
+        perAppHoldOffUntilMs = 0L
+
+        return try {
+            processor.resetStates()
+            processor.updateConfig(parsedConfig)
 
                 val ctx = ensureShellContext()
+                registerPlaybackMonitor()
+                refreshPerAppLowLatencyFromManager()
                 val myUid = Process.myUid()
 
                 val mixingRuleClass = Class.forName("android.media.audiopolicy.AudioMixingRule")
@@ -307,7 +465,9 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
                 for (uid in allExcludedUids) {
                     excludeMixRule.invoke(ruleBuilder, RULE_MATCH_UID, Integer.valueOf(uid))
                 }
-                excludedUidCount = allExcludedUids.count { it != myUid && it != clientAppUid }
+                val normalizedUserExcluded = normalizeUserExcludedUids(myUid, clientAppUid, excludedUids)
+                activeUserExcludedUids = normalizedUserExcluded
+                excludedUidCount = normalizedUserExcluded.size
                 val mixingRule = mixingRuleBuilderClass.getMethod("build").invoke(ruleBuilder)
 
                 val mixFormat = AudioFormat.Builder()
@@ -351,20 +511,21 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
                     stopInternal()
                     return false
                 }
+                val initialLowLatency = isLowLatencyActive()
+                applyTrackBufferSizeForMode(track, initialLowLatency)
                 activeTrack = track
 
                 loopRunning.set(true)
-                val t = Thread({ runAudioLoop(record, track) }, "peq-audio-loop")
+                val t = Thread({ runAudioLoop(record, track, initialLowLatency) }, "peq-audio-loop")
                 workerThread = t
                 t.start()
                 Log.i(TAG, "Loopback engine started cleanly (uid=$myUid, userExcluded=$excludedUidCount)")
                 true
-            } catch (t: Throwable) {
-                Log.e(TAG, "startLoopback failed", t)
-                lastError = "${t.javaClass.simpleName}: ${t.message}"
-                stopInternal()
-                false
-            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "startLoopback failed", t)
+            lastError = "${t.javaClass.simpleName}: ${t.message}"
+            stopInternal()
+            false
         }
     }
 
@@ -409,7 +570,7 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
             AudioFormat.CHANNEL_IN_STEREO,
             AudioFormat.ENCODING_PCM_16BIT
         )
-        val bufBytes = maxOf(minBuf, BLOCK_SHORTS * 2 * 4)
+        val bufBytes = maxOf(minBuf, BLOCK_SHORTS_STANDARD * 2 * 4)
 
         val rb = AudioRecord.Builder()
             .setContext(ctx)
@@ -427,7 +588,7 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
             AudioFormat.CHANNEL_OUT_STEREO,
             AudioFormat.ENCODING_PCM_16BIT
         )
-        val outBufBytes = maxOf(minOutBuf, BLOCK_SHORTS * 2 * 4)
+        val outBufBytes = maxOf(minOutBuf, BLOCK_SHORTS_STANDARD * 2 * 4)
         val builder = AudioTrack.Builder()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             builder.setContext(ctx)
@@ -452,13 +613,115 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
             .build()
     }
 
-    private fun runAudioLoop(record: AudioRecord, track: AudioTrack) {
+    private fun isLowLatencyActive(): Boolean = globalLowLatencyEnabled || perAppLowLatencyActive
+
+    private fun applyTrackBufferSizeForMode(track: AudioTrack, lowLatency: Boolean) {
+        try {
+            val capacity = track.bufferCapacityInFrames
+            val desired = if (lowLatency) {
+                minOf(capacity, LOW_LATENCY_TRACK_BUFFER_FRAMES).coerceAtLeast(BLOCK_SHORTS_LOW_LATENCY / 2)
+            } else {
+                capacity
+            }
+            val actual = track.setBufferSizeInFrames(desired)
+            currentTrackBufferFrames = if (actual > 0) actual else desired
+            Log.i(TAG, "AudioTrack buffer size updated: lowLatency=$lowLatency, desired=$desired, actual=$actual, cap=$capacity")
+        } catch (t: Throwable) {
+            Log.w(TAG, "setBufferSizeInFrames failed (lowLatency=$lowLatency)", t)
+        }
+    }
+
+    private fun registerPlaybackMonitor() {
+        val am = audioManager ?: return
+        unregisterPlaybackMonitor()
+        try {
+            val thread = HandlerThread("peq-playback-cb").apply { start() }
+            playbackHandlerThread = thread
+            val handler = Handler(thread.looper)
+            val cb = object : AudioManager.AudioPlaybackCallback() {
+                override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>?) {
+                    recomputePerAppLowLatency(configs.orEmpty())
+                }
+            }
+            playbackCallback = cb
+            am.registerAudioPlaybackCallback(cb, handler)
+        } catch (t: Throwable) {
+            Log.w(TAG, "registerAudioPlaybackCallback failed", t)
+        }
+    }
+
+    private fun unregisterPlaybackMonitor() {
+        val am = audioManager
+        val cb = playbackCallback
+        playbackCallback = null
+        if (am != null && cb != null) {
+            runCatching { am.unregisterAudioPlaybackCallback(cb) }
+        }
+        playbackHandlerThread?.let { thread ->
+            runCatching { thread.quitSafely() }
+        }
+        playbackHandlerThread = null
+    }
+
+    private fun refreshPerAppLowLatencyFromManager() {
+        val am = audioManager ?: return
+        val configs = runCatching { am.activePlaybackConfigurations }.getOrElse { emptyList() }
+        recomputePerAppLowLatency(configs)
+    }
+
+    private fun recomputePerAppLowLatency(configs: List<AudioPlaybackConfiguration>) {
+        synchronized(playbackLock) {
+            val targetUids = lowLatencyUidSet
+            if (targetUids.isEmpty()) {
+                perAppLowLatencyActive = false
+                perAppHoldOffUntilMs = 0L
+                return
+            }
+
+            var matchedActive = false
+            for (config in configs) {
+                val usage = config.audioAttributes?.usage ?: continue
+                if (usage != AudioAttributes.USAGE_MEDIA &&
+                    usage != AudioAttributes.USAGE_GAME &&
+                    usage != AudioAttributes.USAGE_UNKNOWN
+                ) {
+                    continue
+                }
+                val uid = runCatching { playbackGetClientUidMethod?.invoke(config) as? Int }.getOrNull() ?: -1
+                if (uid !in targetUids) continue
+
+                val isAct = runCatching { playbackIsActiveMethod?.invoke(config) as? Boolean }.getOrNull() == true
+                val state = runCatching { playbackGetPlayerStateMethod?.invoke(config) as? Int }.getOrNull()
+                if (isAct || state == PLAYER_STATE_STARTED) {
+                    matchedActive = true
+                    break
+                }
+            }
+
+            if (matchedActive) {
+                perAppLowLatencyActive = true
+                perAppHoldOffUntilMs = 0L
+            } else if (perAppLowLatencyActive) {
+                val nowMs = SystemClock.elapsedRealtime()
+                if (perAppHoldOffUntilMs == 0L) {
+                    perAppHoldOffUntilMs = nowMs + PER_APP_HOLD_OFF_MS
+                } else if (nowMs >= perAppHoldOffUntilMs) {
+                    perAppLowLatencyActive = false
+                    perAppHoldOffUntilMs = 0L
+                }
+            }
+        }
+    }
+
+    private fun runAudioLoop(record: AudioRecord, track: AudioTrack, initialLowLatency: Boolean) {
         try {
             Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
             record.startRecording()
             track.play()
 
-            val buf = ShortArray(BLOCK_SHORTS)
+            val buf = ShortArray(BLOCK_SHORTS_STANDARD)
+            var appliedLowLatency = initialLowLatency
+            var framesWritten = 0L
             var lastMeterNs = System.nanoTime()
             var winInPeak = 0
             var winInSumSq = 0.0
@@ -467,7 +730,14 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
             var winSamples = 0L
 
             while (loopRunning.get()) {
-                val read = record.read(buf, 0, buf.size)
+                val lowLatencyNow = isLowLatencyActive()
+                if (lowLatencyNow != appliedLowLatency) {
+                    applyTrackBufferSizeForMode(track, lowLatencyNow)
+                    appliedLowLatency = lowLatencyNow
+                }
+
+                val targetShorts = if (lowLatencyNow) BLOCK_SHORTS_LOW_LATENCY else BLOCK_SHORTS_STANDARD
+                val read = record.read(buf, 0, targetShorts)
                 if (read < 0) {
                     if (loopRunning.get()) {
                         lastError = "AudioRecord.read error: $read"
@@ -483,23 +753,44 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
                     winInSumSq += s.toDouble() * s.toDouble()
                 }
 
+                // Always keep DSP biquad filter state continuous across every captured block.
                 processor.processInterleavedPcm16(buf, read)
+                val blockFrames = (read / 2).toLong()
+                framesProcessed.addAndGet(blockFrames)
 
-                for (i in 0 until read) {
-                    val s = buf[i].toInt()
-                    val a = abs(s)
-                    if (a > winOutPeak) winOutPeak = a
-                    winOutSumSq += s.toDouble() * s.toDouble()
-                }
-                winSamples += read
-                framesProcessed.addAndGet((read / 2).toLong())
+                val queuedFrames = queueController.computeQueuedFrames(framesWritten, track.playbackHeadPosition)
+                lastQueuedFrames = queuedFrames
 
-                val written = track.write(buf, 0, read)
-                if (written < 0) {
-                    if (loopRunning.get()) {
-                        lastError = "AudioTrack.write error: $written"
+                val decision = queueController.evaluateAndShape(
+                    pcm16 = buf,
+                    sampleCount = read,
+                    queuedFrames = queuedFrames,
+                    lowLatencyActive = lowLatencyNow
+                )
+
+                if (decision == LatencyQueueController.Decision.DROP_SILENCE ||
+                    decision == LatencyQueueController.Decision.DROP_AUDIO
+                ) {
+                    lowLatencyDroppedBlocks.incrementAndGet()
+                } else {
+                    for (i in 0 until read) {
+                        val s = buf[i].toInt()
+                        val a = abs(s)
+                        if (a > winOutPeak) winOutPeak = a
+                        winOutSumSq += s.toDouble() * s.toDouble()
                     }
-                    break
+                    winSamples += read
+
+                    val written = track.write(buf, 0, read)
+                    if (written < 0) {
+                        if (loopRunning.get()) {
+                            lastError = "AudioTrack.write error: $written"
+                        }
+                        break
+                    }
+                    if (written > 0) {
+                        framesWritten += (written / 2).toLong()
+                    }
                 }
 
                 val now = System.nanoTime()
@@ -514,6 +805,9 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
                     winOutSumSq = 0.0
                     winSamples = 0L
                     lastMeterNs = now
+                    if (lowLatencyUidSet.isNotEmpty() || perAppLowLatencyActive) {
+                        refreshPerAppLowLatencyFromManager()
+                    }
                 }
             }
         } catch (t: Throwable) {
@@ -541,6 +835,15 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
         }
     }
 
+    override fun updateLatencyPolicy(globalLowLatency: Boolean, lowLatencyUids: IntArray?) {
+        synchronized(playbackLock) {
+            globalLowLatencyEnabled = globalLowLatency
+            lowLatencyUidSet = lowLatencyUids?.toHashSet() ?: emptySet()
+            perAppHoldOffUntilMs = 0L
+            refreshPerAppLowLatencyFromManager()
+        }
+    }
+
     override fun stopLoopback() {
         synchronized(stateLock) {
             stopInternal()
@@ -550,6 +853,12 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
     private fun stopInternal() {
         loopRunning.set(false)
         excludedUidCount = 0
+        activeUserExcludedUids = IntArray(0)
+        perAppLowLatencyActive = false
+        perAppHoldOffUntilMs = 0L
+        lastQueuedFrames = 0L
+        currentTrackBufferFrames = 0
+        unregisterPlaybackMonitor()
 
         try {
             activeRecord?.let { r ->
@@ -600,6 +909,179 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
         audioPolicyObj = null
     }
 
+    override fun updateAutoDevicePolicy(policyJson: String) {
+        val policy = try {
+            AutonomousDevicePolicy.fromJsonString(policyJson)
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to parse auto device policy", t)
+            return
+        }
+        synchronized(stateLock) {
+            if (!policy.enabled || destroying.get()) {
+                autonomousPolicy = null
+                autonomousLastDeviceKey = null
+                autonomousPausedByRule = false
+                autonomousSwitchCount = 0
+                unregisterAutonomousDeviceMonitor()
+                return
+            }
+
+            if (policy.clientAppUid > 0) {
+                savedClientAppUid = policy.clientAppUid
+            }
+            savedRawExcludedUids = policy.excludedUids.toIntArray()
+            synchronized(playbackLock) {
+                globalLowLatencyEnabled = policy.globalLowLatency
+                lowLatencyUidSet = policy.lowLatencyUids.toHashSet()
+            }
+
+            autonomousPolicy = policy
+            autonomousCurrentCommonId = policy.selectedPresetId
+            autonomousCurrentIndepId = policy.selectedIndependentPresetId
+            autonomousCurrentDraftIndep = policy.draftIndependentPreset
+            autonomousCurrentSwap = policy.channelSwap
+            autonomousPausedByRule = policy.pausedByDeviceRule
+            autonomousLastDeviceKey = policy.activeDeviceKey
+            autonomousSwitchCount = 0
+
+            ensureAutonomousDeviceMonitorRegistered()
+            scheduleAutonomousDeviceEvaluation(includeFollowUps = false)
+        }
+    }
+
+    private val lateDeviceEvalRunnable = Runnable {
+        evaluateAutonomousDeviceChange()
+    }
+
+    private fun scheduleAutonomousDeviceEvaluation(includeFollowUps: Boolean) {
+        val handler = deviceMonitorHandler ?: return
+        handler.removeCallbacks(delayedDeviceEvalRunnable)
+        handler.removeCallbacks(lateDeviceEvalRunnable)
+        handler.post(delayedDeviceEvalRunnable)
+        if (includeFollowUps) {
+            handler.postDelayed(delayedDeviceEvalRunnable, 250L)
+            handler.postDelayed(lateDeviceEvalRunnable, 700L)
+        }
+    }
+
+    private fun ensureAutonomousDeviceMonitorRegistered() {
+        val ctx = ensureShellContext()
+        val am = audioManager ?: ctx.getSystemService(AudioManager::class.java) ?: return
+        audioManager = am
+        synchronized(deviceMonitorLock) {
+            if (deviceMonitorRegistered || destroying.get()) return
+            val ht = HandlerThread("peq-device-monitor").apply {
+                isDaemon = true
+                start()
+            }
+            val handler = Handler(ht.looper)
+            val cb = object : AudioDeviceCallback() {
+                override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+                    scheduleAutonomousDeviceEvaluation(includeFollowUps = true)
+                }
+
+                override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+                    scheduleAutonomousDeviceEvaluation(includeFollowUps = true)
+                }
+            }
+            deviceMonitorThread = ht
+            deviceMonitorHandler = handler
+            deviceMonitorCallback = cb
+            am.registerAudioDeviceCallback(cb, handler)
+            deviceMonitorRegistered = true
+        }
+    }
+
+    private fun unregisterAutonomousDeviceMonitor() {
+        val am = audioManager
+        synchronized(deviceMonitorLock) {
+            val cb = deviceMonitorCallback
+            val ht = deviceMonitorThread
+            val handler = deviceMonitorHandler
+            deviceMonitorRegistered = false
+            deviceMonitorCallback = null
+            deviceMonitorThread = null
+            deviceMonitorHandler = null
+            handler?.removeCallbacks(delayedDeviceEvalRunnable)
+            handler?.removeCallbacks(lateDeviceEvalRunnable)
+            if (am != null && cb != null) {
+                try {
+                    am.unregisterAudioDeviceCallback(cb)
+                } catch (_: Throwable) {
+                }
+            }
+            try {
+                ht?.quitSafely()
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    private fun evaluateAutonomousDeviceChange() {
+        synchronized(stateLock) {
+            val policy = autonomousPolicy
+            if (policy == null || !policy.enabled || destroying.get()) return
+            val am = audioManager ?: return
+            val activeSnapshot = queryOutputDevicesState(am) { _, product, _, category ->
+                product.ifBlank { category.name }
+            }.activeDevice ?: return
+            val currentKey = activeSnapshot.deviceKey
+            if (currentKey == autonomousLastDeviceKey) return
+
+            val outcome = resolveDeviceRoutingOutcome(
+                deviceKey = currentKey,
+                deviceRules = policy.deviceRules,
+                presets = policy.presets,
+                independentPresets = policy.independentPresets,
+                currentCommonPresetId = autonomousCurrentCommonId,
+                currentIndependentPresetId = autonomousCurrentIndepId,
+                draftIndependentPreset = autonomousCurrentDraftIndep,
+                currentChannelSwap = autonomousCurrentSwap,
+                swapPosition = policy.swapPosition
+            )
+
+            autonomousLastDeviceKey = currentKey
+            autonomousCurrentCommonId = outcome.selectedCommonPresetId
+            autonomousCurrentIndepId = outcome.selectedIndependentPresetId
+            autonomousCurrentDraftIndep = outcome.draftIndependentPreset
+            autonomousCurrentSwap = outcome.channelSwap
+            autonomousPausedByRule = outcome.pausedByDeviceRule
+            autonomousSwitchCount++
+
+            Log.i(
+                TAG,
+                "Autonomous device switch: device=$currentKey paused=${outcome.pausedByDeviceRule} " +
+                    "common=${outcome.selectedCommonPresetId} indep=${outcome.selectedIndependentPresetId} " +
+                    "swap=${outcome.channelSwap}"
+            )
+
+            if (outcome.pausedByDeviceRule) {
+                if (loopRunning.get()) {
+                    stopInternal()
+                }
+                return
+            }
+
+            val config = ActiveDspConfig(
+                bypass = false,
+                channelSwap = outcome.channelSwap,
+                swapPosition = outcome.swapPosition,
+                preset = outcome.effectivePreset
+            )
+            if (loopRunning.get()) {
+                processor.updateConfig(config)
+            } else if (savedClientAppUid > 0) {
+                startLoopbackLocked(
+                    clientAppUid = savedClientAppUid,
+                    excludedUids = savedRawExcludedUids,
+                    globalLowLatency = globalLowLatencyEnabled,
+                    lowLatencyUids = lowLatencyUidSet.toIntArray(),
+                    parsedConfig = config
+                )
+            }
+        }
+    }
+
     override fun getStatusJson(): String {
         return JSONObject().apply {
             put("running", loopRunning.get())
@@ -607,16 +1089,39 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
             put("sampleRate", SAMPLE_RATE)
             put("framesProcessed", framesProcessed.get())
             put("excludedUidCount", excludedUidCount)
+            put("userExcludedUids", JSONArray().apply {
+                for (u in activeUserExcludedUids) put(u)
+            })
+            put("globalLowLatency", globalLowLatencyEnabled)
+            put("lowLatencyActive", isLowLatencyActive())
+            put("perAppLowLatencyActive", perAppLowLatencyActive)
+            put("lowLatencyDroppedBlocks", lowLatencyDroppedBlocks.get())
+            put("queuedFrames", lastQueuedFrames)
+            put("trackBufferFrames", currentTrackBufferFrames)
             put("inPeakDbfs", inPeakDbfs)
             put("inRmsDbfs", inRmsDbfs)
             put("outPeakDbfs", outPeakDbfs)
             put("outRmsDbfs", outRmsDbfs)
+            put("autonomousPolicyActive", autonomousPolicy?.enabled == true)
+            put("autonomousSwitchCount", autonomousSwitchCount)
+            put("activeDeviceKey", autonomousLastDeviceKey ?: JSONObject.NULL)
+            put("commonPresetId", autonomousCurrentCommonId)
+            put("independentPresetId", autonomousCurrentIndepId ?: JSONObject.NULL)
+            put("hasDraftIndependent", autonomousCurrentDraftIndep != null)
+            put("channelSwap", autonomousCurrentSwap)
+            put("pausedByDeviceRule", autonomousPausedByRule)
             put("error", lastError ?: JSONObject.NULL)
         }.toString()
     }
 
     override fun registerClientToken(clientToken: IBinder?) {
-        if (clientToken == null || destroying.get()) return
+        if (destroying.get()) return
+        if (clientToken == null) {
+            synchronized(clientLock) {
+                unlinkClientTokenLocked()
+            }
+            return
+        }
         var clientAlreadyDead = false
         synchronized(clientLock) {
             if (linkedClientToken === clientToken) return
@@ -658,6 +1163,7 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
         synchronized(clientLock) {
             unlinkClientTokenLocked()
         }
+        unregisterAutonomousDeviceMonitor()
         stopLoopback()
         exitProcess(0)
     }

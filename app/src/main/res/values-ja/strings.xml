@@ -31,7 +31,7 @@
     <string name="shizuku_permission_needed">権限許可</string>
     <string name="shizuku_stopped">Shizuku 停止</string>
     <string name="cd_appearance_settings">外観・Liquid Glass 設定</string>
-    <string name="header_subtitle_format">64-bit Exclusive • %1$s</string>
+    <string name="header_subtitle_format">%1$s</string>
     <string name="badge_lr_swap">L⇄R SWAP</string>
 
     <!-- Quick Dock -->
@@ -96,6 +96,9 @@
     <string name="dialog_freq_label">中心周波数 Fc (Hz)</string>
     <string name="dialog_gain_label">ゲイン Gain (dB)</string>
     <string name="dialog_q_label">Q 値</string>
+    <string name="dialog_preamp_title">%1$s の詳細入力</string>
+    <string name="dialog_preamp_label">プリアンプゲイン (-60.0 〜 +12.0 dB)</string>
+    <string name="dialog_preamp_hint">直接入力や ±0.1 dB / ±1.0 dB / ±5.0 dB ボタンで高精度に調整できます。</string>
 
     <!-- Preset Modified Tracking & Presets Tab -->
     <string name="preset_flat_name">フラット (0 dB)</string>
@@ -106,13 +109,41 @@
     <string name="action_revert_to_imported">元の状態に戻す</string>
     <string name="action_save_as_new_short">別名保存</string>
     <string name="apo_card_title">Equalizer APO (.txt) 管理</string>
-    <string name="apo_card_desc">Channel: L / Channel: R を含む設定ファイルやチャンネルスワップ設定をそのまま読込・書出しできます。</string>
+    <string name="apo_card_desc">Channel: L / Channel: R を含む設定ファイルを読込・書出しできます（セット品は L/R プリセットへも自動登録）。</string>
     <string name="action_import_file">ファイル読込</string>
     <string name="action_paste_text">テキスト貼付</string>
     <string name="action_export_apo">APO書出し</string>
     <string name="action_save_as_new">別名で保存</string>
     <string name="saved_presets_title">保存済みプリセット (%1$d)</string>
+    <string name="saved_presets_desc">共通のみ・共通+L/Rセットの両方を管理します。共通のみを選んだ場合は現在の L/R プリセットが維持されます。</string>
     <string name="preset_summary_format">共通:%1$d(%2$+.1f) · L:%3$d(%4$+.1f) · R:%5$d(%6$+.1f) dB</string>
+    <string name="preset_summary_common_format">共通:%1$d(%2$+.1f dB)</string>
+    <string name="preset_summary_linked_lr_format">共通:%1$d(%2$+.1f) · 連動L/R: %3$s</string>
+    <string name="preset_type_bundle">セット (共通+L/R)</string>
+    <string name="preset_type_common">共通のみ</string>
+    <string name="preset_common_active_badge">共通のみ適用</string>
+    <string name="lr_presets_title">L/R プリセット (%1$d)</string>
+    <string name="lr_presets_desc">左右個別チャンネル（L / R）のみのプリセットです。共通プリセットを切り替えてもそのまま維持されます。</string>
+    <string name="lr_preset_none_title">L/R なし (0 dB)</string>
+    <string name="lr_preset_none_desc">L/R 個別 EQ・プリアンプを適用しない標準状態</string>
+    <string name="lr_preset_none_short">L/R なし</string>
+    <string name="lr_summary_format">L:%1$d(%2$+.1f) · R:%3$d(%4$+.1f dB)</string>
+    <string name="lr_draft_title">未保存の L/R 設定</string>
+    <string name="lr_draft_default_name">カスタム L/R</string>
+    <string name="action_save_as_lr_preset">L/Rプリセット保存</string>
+    <string name="action_discard_lr_draft">破棄</string>
+    <string name="dialog_save_lr_title">L/R プリセットとして保存</string>
+    <string name="field_lr_preset_name">L/R プリセット名</string>
+    <string name="dialog_rename_lr_title">L/R プリセット名を変更</string>
+    <string name="dialog_delete_lr_title">L/R プリセットを削除</string>
+    <string name="dialog_delete_lr_message">L/R プリセット「%1$s」を削除しますか？</string>
+    <string name="dialog_delete_lr_linked_note">L/R プリセット「%1$s」を削除しますか？\n※ 連動しているセット（%2$s）は共通のみになります。</string>
+    <string name="dialog_save_as_include_lr">現在の L/R（%1$s）も含めてセット保存</string>
+    <string name="dialog_bundle_conflict_title">L/R プリセットも変更しますか？</string>
+    <string name="dialog_bundle_conflict_message">「%1$s」には L/R プリセット（%2$s）が含まれています。現在有効な「%3$s」の扱いをどうしますか？</string>
+    <string name="action_apply_common_only">共通PEQのみ変更</string>
+    <string name="action_apply_bundle_both">L/R も同時に変更</string>
+    <string name="peq_draft_lr_banner">未保存の L/R 設定を編集しました</string>
     <string name="cd_preset_actions">プリセット操作</string>
     <string name="dialog_save_as_title">別プリセットとして新規保存</string>
     <string name="dialog_save_as_revert_source">元の「%1$s」をインポート直後の状態に戻す</string>
@@ -131,7 +162,7 @@
     <!-- Routing Tab -->
     <string name="routing_preset_linked">プリセット連動: %1$s</string>
     <string name="routing_channel_swap_title">チャンネルスワップ</string>
-    <string name="routing_channel_swap_on">左右反転 有効（このプリセットに保存）</string>
+    <string name="routing_channel_swap_on">左右反転 有効（プリセット変更でも維持）</string>
     <string name="routing_channel_swap_off">標準 (L→L, R→R)</string>
     <string name="routing_flow_off">信号フロー: 入力 → 共通PEQ → L/R独立PEQ(HW補正) → DAC出力</string>
     <string name="routing_flow_before">信号フロー: 入力 → 共通PEQ → [L⇄R スワップ] → L/R独立PEQ(HW補正) → DAC出力</string>
@@ -142,10 +173,25 @@
     <string name="swap_pos_after_title">左右独立PEQの後にスワップ（ケーブル逆挿し補正など）</string>
     <string name="swap_pos_after_detail">入力LR → 共通PEQ → 左右独立PEQ → [L⇄R スワップ] → DAC出力\n左右独立PEQが元の音源チャンネル側に対してかかったあと、最終段のL/R出力ピンだけを入れ替えます。</string>
     <string name="routing_rules_title">出力機器別 自動プリセット連動 (%1$d)</string>
-    <string name="routing_rules_desc">USB DAC・Bluetooth機器・スピーカーの切替を監視し、割当プリセット（各プリセットのL⇄Rスワップ設定含む）へ自動切替します。</string>
+    <string name="routing_rules_desc">USB DAC・Bluetooth機器・スピーカーの切替を監視し、共通 / L/R プリセットや L⇄R スワップを自動適用します。</string>
     <string name="rule_follow_manual_short">手動選択を使用</string>
     <string name="rule_eq_off_short">EQ OFF (バイパス)</string>
     <string name="rule_preset_unselected">プリセット未選択</string>
+    <string name="rule_action_preset_short">プリセット</string>
+    <string name="rule_sheet_action_manual">手動維持</string>
+    <string name="rule_sheet_action_preset">プリセット</string>
+    <string name="rule_sheet_action_eq_off">EQ OFF</string>
+    <string name="rule_common_keep_manual">共通は変更しない（手動維持）</string>
+    <string name="rule_lr_keep_current">変更しない（現在のまま維持）</string>
+    <string name="rule_summary_keep_common">共通: 手動</string>
+    <string name="rule_summary_keep_lr">L/R: 維持</string>
+    <string name="rule_swap_section_title">L⇄R チャンネルスワップ</string>
+    <string name="rule_swap_follow_manual">手動のまま</string>
+    <string name="rule_swap_force_off">常に OFF</string>
+    <string name="rule_swap_force_on">常に ON</string>
+    <string name="rule_sheet_tab_saved">保存済み (%1$d)</string>
+    <string name="rule_sheet_tab_lr">L/R プリセット (%1$d)</string>
+    <string name="rule_sheet_subtitle">接続時の自動プリセット &amp; L⇄R スワップ設定</string>
     <string name="device_badge_active">現在の出力先</string>
     <string name="device_badge_connected">接続済み</string>
     <string name="cd_remove_history">履歴を削除</string>
@@ -212,6 +258,13 @@
     <string name="banner_device_eq_off">%1$s 接続中のため自動で EQ OFF（バイパス）中です</string>
     <string name="banner_device_auto_preset">%1$s → 「%2$s」を自動適用</string>
     <string name="banner_preset_selected">プリセット「%1$s」を選択しました</string>
+    <string name="banner_bundle_selected">「%1$s」+ L/R「%2$s」を適用しました</string>
+    <string name="banner_lr_selected">L/R プリセット「%1$s」を適用しました</string>
+    <string name="banner_lr_cleared">L/R プリセットを解除しました (0 dB)</string>
+    <string name="banner_saved_new_lr_preset">新規 L/R プリセット「%1$s」を保存しました</string>
+    <string name="banner_deleted_lr_preset">L/R プリセットを削除しました</string>
+    <string name="banner_apo_imported_lr_preset">L/R プリセット「%1$s」を取込 (L %2$d / R %3$d)</string>
+    <string name="lr_custom_fallback">カスタム L/R</string>
     <string name="banner_auto_preamp_adjusted">最大ゲイン 0 dB に合わせて共通プリアンプを %1$.1f dB に自動調整しました</string>
     <string name="banner_saved_new_preset">新規プリセット「%1$s」を保存しました</string>
     <string name="banner_reverted_preset">「%1$s」を元の設定に戻しました</string>
@@ -234,7 +287,28 @@
     <string name="default_output_label">標準出力</string>
     <string name="connected_device_label">接続機器</string>
 
-    <!-- App Bypass -->
+    <!-- App Bypass & Low Latency -->
+    <string name="low_latency_badge">低遅延</string>
+    <string name="low_latency_short_label">低遅延</string>
+    <string name="routing_low_latency_title">全体一括 低遅延モード</string>
+    <string name="routing_low_latency_subtitle_on">ゲーム・動画向けに最小バッファで高速応答</string>
+    <string name="routing_low_latency_subtitle_off">標準バッファで音切れ耐性を優先</string>
+    <string name="routing_low_latency_flow_global_on">全体一括 低遅延 ON — 4 ms 処理と動的キュー制御（バイパス対象を除く全アプリに適用）</string>
+    <string name="routing_low_latency_flow_per_app_on">個別低遅延が自動稼働中 — 指定アプリの再生を検知したため低遅延モードへ切替済み</string>
+    <string name="routing_low_latency_flow_standard">標準モード稼働中 — 10 ms 安定バッファ（アプリ別設定が「低遅延」のアプリ再生時のみ自動で切替）</string>
+    <string name="app_mode_standard">標準</string>
+    <string name="app_mode_bypass">バイパス</string>
+    <string name="app_mode_low_latency">低遅延</string>
+    <string name="routing_app_rules_title">アプリ別オーディオ動作 (%1$d)</string>
+    <string name="routing_app_rules_desc">アプリごとに「標準（通常EQ）」「バイパス（Quveを完全スキップ）」「低遅延（再生時のみ自動で最小遅延へ切替）」を選択できます。</string>
+    <string name="routing_app_rules_global_hint">現在「全体一括 低遅延 ON」のため、標準アプリも低遅延で動作します（バイパスアプリは引き続き除外）。</string>
+    <string name="routing_app_rules_empty">現在はすべてのアプリが「標準（デフォルト）」です。アプリごとにバイパスや低遅延を設定できます。</string>
+    <string name="action_select_app_rules">アプリを設定</string>
+    <string name="action_reset_all_standard">すべて標準へ</string>
+    <string name="cd_reset_app_standard">%1$s を標準に戻す</string>
+    <string name="app_rules_picker_title">アプリ別オーディオ動作</string>
+    <string name="app_rules_picker_subtitle">設定済み %1$d 件（低遅延 %2$d • バイパス %3$d）</string>
+    <string name="app_rules_picker_subtitle_hint">標準 ⇄ 低遅延は音切れなく即時反映 • バイパス変更時は再接続</string>
     <string name="routing_bypass_apps_title">処理バイパスアプリ (%1$d)</string>
     <string name="routing_bypass_apps_desc">選択したアプリは Quve のループバック処理を通さず、Android 標準の音声経路で直接再生します。</string>
     <string name="routing_bypass_apps_empty">バイパス中のアプリはありません（すべてのメディア・ゲーム音声に Quve を適用）。</string>
@@ -252,6 +326,19 @@
     <string name="bypass_uid_badge">UID %1$d</string>
     <string name="bypass_not_installed">未インストール</string>
     <string name="action_apply_count">適用 (%1$d)</string>
+    <string name="banner_global_low_latency_on">全体一括 低遅延モードを ON にしました</string>
+    <string name="banner_global_low_latency_off">全体一括 低遅延モードを OFF にしました</string>
+    <string name="banner_app_rules_updated">アプリ別オーディオ動作を更新しました (%1$d 件)</string>
+    <string name="banner_app_rules_cleared">すべてのアプリを標準に戻しました</string>
     <string name="banner_bypass_apps_updated">バイパス対象アプリを更新しました (%1$d 件)</string>
     <string name="banner_bypass_apps_cleared">バイパス対象アプリをすべて解除しました</string>
+
+    <!-- Background Keep-Alive -->
+    <string name="routing_bg_persistence_title">バックグラウンド EQ 維持モード</string>
+    <string name="routing_bg_persistence_subtitle_on">本体が落とされても DSP 維持 &amp; 機器別プリセットを自動切替</string>
+    <string name="routing_bg_persistence_subtitle_off">通常ライフサイクル（本体終了と同時に EQ も停止）</string>
+    <string name="routing_bg_persistence_desc_on">OS に Quve 本体が終了されても Shizuku 側 DSP デーモンを動かし続け、出力機器の変更を検知して即座に機種別プリセット・Auto EQ OFF を自動適用します。本体復帰時は音切れさせず同期します。（稼働中の切替時のみ一瞬再接続します）</string>
+    <string name="routing_bg_persistence_desc_off">Shizuku 側 DSP をアプリに紐づけて動作し、本体終了時に完全停止します。バックグラウンドで EQ が切れる場合は ON にしてください。（稼働中の切替時のみ一瞬再接続します）</string>
+    <string name="banner_background_persistence_on">バックグラウンド EQ 維持モードを ON にしました</string>
+    <string name="banner_background_persistence_off">バックグラウンド EQ 維持モードを OFF にしました</string>
 </resources>

@@ -5,6 +5,7 @@ import com.superglobalpeq.app.model.EqPreset
 import com.superglobalpeq.app.model.FilterType
 import com.superglobalpeq.app.model.PeqBand
 import com.superglobalpeq.app.model.SwapPosition
+import com.superglobalpeq.app.model.clampPreampDb
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.log10
@@ -249,7 +250,7 @@ object FrequencyResponseCalculator {
     fun computeAutoPreampAdjustmentDb(preset: EqPreset, sampleRate: Double = SAMPLE_RATE): Double {
         val curves = calculate(preset, sampleRate)
         val maxTotal = max(curves.peakLeftDb, curves.peakRightDb)
-        return (preset.commonPreampDb - maxTotal).coerceIn(-24.0, 12.0)
+        return clampPreampDb(preset.commonPreampDb - maxTotal)
     }
 }
 

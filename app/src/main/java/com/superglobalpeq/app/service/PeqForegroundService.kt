@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.superglobalpeq.app.MainActivity
 import com.superglobalpeq.app.R
@@ -16,6 +17,7 @@ import com.superglobalpeq.app.data.QuveSettings
 
 class PeqForegroundService : Service() {
     companion object {
+        private const val TAG = "PeqForegroundService"
         private const val CHANNEL_ID = "super_peq_engine"
         private const val NOTIFICATION_ID = 31401
         private const val ACTION_STOP = "com.superglobalpeq.app.ACTION_STOP_ENGINE"
@@ -25,7 +27,11 @@ class PeqForegroundService : Service() {
                 putExtra("title", title)
                 putExtra("text", text)
             }
-            context.startForegroundService(intent)
+            try {
+                context.startForegroundService(intent)
+            } catch (t: Throwable) {
+                Log.w(TAG, "Unable to startForegroundService right now", t)
+            }
         }
 
         fun stop(context: Context) {
@@ -35,10 +41,14 @@ class PeqForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        QuveSettings.initialize(applicationContext)
         createChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        QuveSettings.initialize(applicationContext)
+        PeqEngineManager.initialize(applicationContext)
+
         if (intent?.action == ACTION_STOP) {
             PeqEngineManager.setMasterPower(false)
             stopSelf()
@@ -47,15 +57,42 @@ class PeqForegroundService : Service() {
 
         createChannel()
         val localized = QuveSettings.localizedContext(this)
-        val title = intent?.getStringExtra("title") ?: localized.getString(R.string.notif_default_title)
-        val text = intent?.getStringExtra("text") ?: localized.getString(R.string.notif_default_text)
+        val stickyRestart = intent == null
+        val keepSticky = PeqEngineManager.shouldKeepServiceSticky()
+
+        if (stickyRestart && !keepSticky) {
+            val notification = buildNotification(
+                localized = localized,
+                title = localized.getString(R.string.notif_default_title),
+                text = localized.getString(R.string.notif_default_text)
+            )
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            )
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        val fallbackContent = PeqEngineManager.buildForegroundNotificationContent()
+        val title = intent?.getStringExtra("title")
+            ?: fallbackContent?.first
+            ?: localized.getString(R.string.notif_default_title)
+        val text = intent?.getStringExtra("text")
+            ?: fallbackContent?.second
+            ?: localized.getString(R.string.notif_default_text)
         val notification = buildNotification(localized, title, text)
         startForeground(
             NOTIFICATION_ID,
             notification,
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
         )
-        return START_STICKY
+
+        if (stickyRestart) {
+            PeqEngineManager.onForegroundServiceRestored()
+        }
+        return if (keepSticky) START_STICKY else START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

@@ -19,6 +19,7 @@
     </queries>
 
     <application
+        android:name=".QuveApplication"
         android:allowBackup="true"
         android:appCategory="audio"
         android:enableOnBackInvokedCallback="true"

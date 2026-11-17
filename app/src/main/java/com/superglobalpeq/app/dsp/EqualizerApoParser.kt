@@ -5,6 +5,7 @@ import com.superglobalpeq.app.model.FilterType
 import com.superglobalpeq.app.model.PeqBand
 import com.superglobalpeq.app.model.PeqChannelTarget
 import com.superglobalpeq.app.model.SwapPosition
+import com.superglobalpeq.app.model.clampPreampDb
 import java.util.Locale
 import kotlin.math.pow
 
@@ -91,10 +92,11 @@ object EqualizerApoParser {
                 if (db == null) {
                     warnings.add("L$lineNo: Failed to parse Preamp value")
                 } else {
+                    val clamped = clampPreampDb(db)
                     when (currentTarget) {
-                        PeqChannelTarget.COMMON -> commonPreamp = db
-                        PeqChannelTarget.LEFT -> leftPreamp = db
-                        PeqChannelTarget.RIGHT -> rightPreamp = db
+                        PeqChannelTarget.COMMON -> commonPreamp = clamped
+                        PeqChannelTarget.LEFT -> leftPreamp = clamped
+                        PeqChannelTarget.RIGHT -> rightPreamp = clamped
                     }
                 }
                 return@forEachIndexed
@@ -185,7 +187,7 @@ object EqualizerApoParser {
             val line = rawLine.substringBefore('#').trim()
             if (line.isEmpty()) return@forEach
             preampRegex.matchEntire(line)?.let { m ->
-                preamp = m.groupValues[1].replace(',', '.').toDoubleOrNull()
+                preamp = m.groupValues[1].replace(',', '.').toDoubleOrNull()?.let(::clampPreampDb)
                 return@forEach
             }
             filterHeaderRegex.matchEntire(line)?.let { m ->

@@ -104,9 +104,36 @@ private class PlotBounds {
 
 private const val MIN_FREQ_HZ = 20.0
 private const val MAX_FREQ_HZ = 20000.0
-private const val MIN_DB = -18f
+private const val DEFAULT_MIN_DB = -18f
 private const val MAX_DB = 12f
 private const val PREAMP_EPSILON = 1e-4
+
+/**
+ * Selects the graph bottom limit and Y-axis ticks so default EQ curves keep high
+ * vertical detail (`-18..+12 dB`) while deeper preamp attenuation expands cleanly down to `-72 dB`.
+ */
+internal fun computeAdaptiveGraphYAxis(
+    curves: FrequencyResponseCurves?,
+    hasIndependentLR: Boolean,
+    targetBaseDb: Double,
+): Pair<Float, List<Float>> {
+    var observedMin = targetBaseDb.toFloat()
+    if (curves != null) {
+        curves.commonDb.minOrNull()?.let { observedMin = minOf(observedMin, it.toFloat()) }
+        if (hasIndependentLR) {
+            curves.totalLeftDb.minOrNull()?.let { observedMin = minOf(observedMin, it.toFloat()) }
+            curves.totalRightDb.minOrNull()?.let { observedMin = minOf(observedMin, it.toFloat()) }
+        }
+    }
+    return when {
+        observedMin >= -18f -> DEFAULT_MIN_DB to listOf(12f, 6f, 0f, -6f, -12f, -18f)
+        observedMin >= -24f -> -24f to listOf(12f, 6f, 0f, -6f, -12f, -18f, -24f)
+        observedMin >= -36f -> -36f to listOf(12f, 0f, -12f, -24f, -36f)
+        observedMin >= -48f -> -48f to listOf(12f, 0f, -12f, -24f, -36f, -48f)
+        observedMin >= -60f -> -60f to listOf(12f, 0f, -12f, -24f, -36f, -48f, -60f)
+        else -> -72f to listOf(12f, 0f, -24f, -48f, -72f)
+    }
+}
 
 /**
  * Returns `true` only when Left or Right independent calibration actually modifies
@@ -506,8 +533,19 @@ fun FrequencyResponseGraphCard(
                                 )
                             },
                     ) {
+                        val targetBaseDb = when (editingTarget) {
+                            PeqChannelTarget.COMMON -> preset.preampFor(editingTarget)
+                            PeqChannelTarget.LEFT, PeqChannelTarget.RIGHT ->
+                                preset.commonPreampDb + preset.preampFor(editingTarget)
+                        }
+                        val (effectiveMinDb, dbTicks) = computeAdaptiveGraphYAxis(
+                            curves = curves,
+                            hasIndependentLR = hasIndependentLR,
+                            targetBaseDb = targetBaseDb,
+                        )
+
                         Canvas(modifier = Modifier.fillMaxSize()) {
-                            val sampleDbLayout = textMeasurer.measure("-18", style = axisTextStyle)
+                            val sampleDbLayout = textMeasurer.measure("${effectiveMinDb.toInt()}", style = axisTextStyle)
                             val sampleFreqLayout = textMeasurer.measure("20k", style = axisTextStyle)
 
                             val plotLeft = sampleDbLayout.size.width + 12.dp.toPx()
@@ -531,8 +569,8 @@ fun FrequencyResponseGraphCard(
                             }
 
                             fun dbToY(db: Float): Float {
-                                val clamped = db.coerceIn(MIN_DB, MAX_DB)
-                                val norm = (clamped - MIN_DB) / (MAX_DB - MIN_DB)
+                                val clamped = db.coerceIn(effectiveMinDb, MAX_DB)
+                                val norm = (clamped - effectiveMinDb) / (MAX_DB - effectiveMinDb)
                                 return plotBottom - norm * plotH
                             }
 
@@ -603,11 +641,10 @@ fun FrequencyResponseGraphCard(
                             }
 
                             // Horizontal dB gridlines & aligned Y-axis labels
-                            val dbTicks = listOf(12f, 6f, 0f, -6f, -12f, -18f)
                             for (gdb in dbTicks) {
                                 val y = dbToY(gdb)
                                 val isZero = gdb == 0f
-                                val isEdge = gdb == MAX_DB || gdb == MIN_DB
+                                val isEdge = gdb == MAX_DB || gdb == effectiveMinDb
                                 drawLine(
                                     color = when {
                                         isZero -> zeroGridColor
