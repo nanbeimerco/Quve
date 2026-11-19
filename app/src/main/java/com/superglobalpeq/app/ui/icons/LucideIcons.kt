@@ -586,6 +586,37 @@ object LucideIcons {
         }
     }
 
+    val Trophy: ImageVector by lazy {
+        lucideIcon("Trophy") { s, w ->
+            strokePath(s, w) {
+                moveTo(6f, 9f)
+                horizontalLineTo(4.5f)
+                arcToRelative(2.5f, 2.5f, 0f, false, true, 0f, -5f)
+                horizontalLineTo(6f)
+                moveTo(18f, 9f)
+                horizontalLineToRelative(1.5f)
+                arcToRelative(2.5f, 2.5f, 0f, false, false, 0f, -5f)
+                horizontalLineTo(18f)
+                moveTo(4f, 22f)
+                horizontalLineToRelative(16f)
+                moveTo(10f, 14.66f)
+                verticalLineTo(17f)
+                curveToRelative(0f, 0.55f, -0.47f, 0.98f, -0.97f, 1.21f)
+                curveTo(7.85f, 18.75f, 7f, 20.24f, 7f, 22f)
+                moveTo(14f, 14.66f)
+                verticalLineTo(17f)
+                curveToRelative(0f, 0.55f, 0.47f, 0.98f, 0.97f, 1.21f)
+                curveTo(16.15f, 18.75f, 17f, 20.24f, 17f, 22f)
+                moveTo(18f, 2f)
+                horizontalLineTo(6f)
+                verticalLineToRelative(7f)
+                arcToRelative(6f, 6f, 0f, false, false, 12f, 0f)
+                verticalLineTo(2f)
+                close()
+            }
+        }
+    }
+
     val Route: ImageVector by lazy {
         lucideIcon("Route") { s, w ->
             strokePath(s, w) {

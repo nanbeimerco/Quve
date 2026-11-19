@@ -72,6 +72,7 @@ enum class QuveTab(
     PEQ(R.string.tab_peq, LucideIcons.SlidersHorizontal),
     PRESETS(R.string.tab_presets, LucideIcons.Layers),
     ROUTING(R.string.tab_routing, LucideIcons.Route),
+    SHOOTOUT(R.string.tab_shootout, LucideIcons.Trophy),
 }
 
 @Composable
@@ -80,6 +81,7 @@ fun QuveFloatingDock(
     onSelectTab: (QuveTab) -> Unit,
     scrollConnection: FloatingTabBarScrollConnection,
     uiState: AppUiState,
+    shootoutRound: Int?,
     onToggleMaster: () -> Unit,
     onToggleChannelSwap: () -> Unit,
     onOpenQuickTarget: () -> Unit,
@@ -148,6 +150,7 @@ fun QuveFloatingDock(
         accessory = { accessoryModifier, morph ->
             QuveQuickControlBar(
                 uiState = uiState,
+                shootoutRound = shootoutRound,
                 morph = morph,
                 contentColor = baseContentColor,
                 useGlass = useGlass,
@@ -233,6 +236,7 @@ fun QuveFloatingDock(
 @Composable
 private fun QuveQuickControlBar(
     uiState: AppUiState,
+    shootoutRound: Int?,
     morph: BarMorph,
     contentColor: Color,
     useGlass: Boolean,
@@ -261,6 +265,7 @@ private fun QuveQuickControlBar(
 
     val detectedDevice = uiState.activeDevice?.displayName
     val statusSubtitle = when {
+        shootoutRound != null -> stringResource(R.string.shootout_dock_subtitle)
         activeRunning -> stringResource(
             R.string.dock_status_running,
             detectedDevice ?: stringResource(R.string.dock_detecting),
@@ -331,9 +336,13 @@ private fun QuveQuickControlBar(
                     } else {
                         uiState.activeCommonPreset.displayName()
                     }
-                    val titleLine = uiState.activeIndependentPreset?.let { indep ->
-                        "$commonShownName + L/R: ${indep.name}"
-                    } ?: commonShownName
+                    val titleLine = if (shootoutRound != null) {
+                        stringResource(R.string.shootout_round_title, shootoutRound)
+                    } else {
+                        uiState.activeIndependentPreset?.let { indep ->
+                            "$commonShownName + L/R: ${indep.name}"
+                        } ?: commonShownName
+                    }
                     Text(
                         text = titleLine,
                         style = MaterialTheme.typography.titleSmall,
@@ -344,7 +353,7 @@ private fun QuveQuickControlBar(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (uiState.channelSwap) {
+                    if (uiState.channelSwap && shootoutRound == null) {
                         Box(
                             modifier = Modifier
                                 .foldAway(narrow, horizontal = true)
@@ -406,8 +415,11 @@ private fun QuveQuickControlBar(
             modifier = Modifier.matchParentSize(),
             content = {
                 // Button 0: Quick Swap L⇄R (fades out when folded into narrow inline pill)
+                // The session owns its swap setting, so this control rests during Shootout.
+                val swapControlEnabled = shootoutRound == null
+                val swapShownOn = uiState.channelSwap && swapControlEnabled
                 val swapBg by animateColorAsState(
-                    targetValue = if (uiState.channelSwap) {
+                    targetValue = if (swapShownOn) {
                         MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
                     } else {
                         contentColor.copy(alpha = 0.10f)
@@ -416,10 +428,12 @@ private fun QuveQuickControlBar(
                 )
                 Box(
                     modifier = Modifier
-                        .graphicsLayer { alpha = 1f - buttonsGone() }
+                        .graphicsLayer {
+                            alpha = (1f - buttonsGone()) * if (swapControlEnabled) 1f else 0.38f
+                        }
                         .clip(CircleShape)
                         .background(swapBg)
-                        .clickable(enabled = swapTappable) {
+                        .clickable(enabled = swapTappable && swapControlEnabled) {
                             haptics.play(Haptic.Select)
                             onToggleChannelSwap()
                         },
@@ -428,7 +442,7 @@ private fun QuveQuickControlBar(
                     Icon(
                         imageVector = LucideIcons.ArrowLeftRight,
                         contentDescription = stringResource(R.string.cd_toggle_channel_swap),
-                        tint = if (uiState.channelSwap) MaterialTheme.colorScheme.primary else contentColor.copy(alpha = 0.85f),
+                        tint = if (swapShownOn) MaterialTheme.colorScheme.primary else contentColor.copy(alpha = 0.85f),
                         modifier = Modifier.size(16.dp),
                     )
                 }

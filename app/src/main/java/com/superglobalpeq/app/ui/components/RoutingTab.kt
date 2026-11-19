@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -63,6 +64,8 @@ import com.superglobalpeq.app.model.OutputDeviceSnapshot
 import com.superglobalpeq.app.model.SwapPosition
 import com.superglobalpeq.app.model.evaluateSavedPresetSelection
 import com.superglobalpeq.app.service.PeqEngineManager
+import com.superglobalpeq.app.tile.QuveTileKind
+import com.superglobalpeq.app.tile.QuveTileRegistry
 import com.superglobalpeq.app.ui.icons.LucideIcons
 import com.superglobalpeq.app.ui.theme.LocalQuveExpressiveColorScheme
 
@@ -95,6 +98,7 @@ fun RoutingTab(
     onOpenAppRulePicker: () -> Unit,
     onChangeAppMode: (String, AppAudioMode) -> Unit,
     onResetAppRules: () -> Unit,
+    onShowMessage: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -389,6 +393,9 @@ fun RoutingTab(
             onChanged = onBackgroundPersistenceChanged
         )
 
+        // Control Center (Quick Settings) Tiles
+        QuickSettingsTilesSection(onShowMessage = onShowMessage)
+
         // App Language Card
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             ExpressiveGroupTitle(text = stringResource(R.string.lang_section_title))
@@ -532,6 +539,109 @@ private fun BackgroundPersistenceCard(
                     },
                     modifier = Modifier.padding(12.dp)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickSettingsTilesSection(
+    onShowMessage: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    val tiles = QuveTileRegistry.allTiles
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ExpressiveGroupTitle(text = stringResource(R.string.qs_section_title))
+        Text(
+            text = stringResource(R.string.qs_section_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+        Spacer(Modifier.height(2.dp))
+        ExpressiveGroup {
+            tiles.forEachIndexed { idx, entry ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .expressiveItem(idx, tiles.size)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    when (entry.kind) {
+                        QuveTileKind.POWER -> QuveGlyphMark(
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        QuveTileKind.PRESET -> Icon(
+                            imageVector = LucideIcons.Layers,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        QuveTileKind.LOW_LATENCY -> Icon(
+                            imageVector = LucideIcons.Zap,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        QuveTileKind.CHANNEL_SWAP -> Icon(
+                            imageVector = LucideIcons.ArrowLeftRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = stringResource(entry.labelRes),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = stringResource(entry.descRes),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            QuveTileRegistry.requestAddTile(
+                                context = context,
+                                entry = entry,
+                                onFeedback = onShowMessage,
+                            )
+                        },
+                        shape = CircleShape,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.defaultMinSize(minHeight = 34.dp),
+                    ) {
+                        Icon(
+                            imageVector = LucideIcons.Plus,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = stringResource(R.string.qs_action_add_tile),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            softWrap = false,
+                            maxLines = 1,
+                        )
+                    }
+                }
             }
         }
     }

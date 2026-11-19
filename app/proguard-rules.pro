@@ -35,3 +35,6 @@
 -dontwarn android.app.ActivityThread
 -dontwarn android.media.audiopolicy.**
 -dontwarn android.os.ServiceManager
+
+# Keep Quick Settings TileService entries & tile picker package
+-keep class com.superglobalpeq.app.tile.** { *; }

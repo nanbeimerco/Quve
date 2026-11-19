@@ -13,6 +13,7 @@ import android.media.AudioPlaybackConfiguration
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
+import android.os.Binder
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
@@ -21,11 +22,14 @@ import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
+import com.superglobalpeq.app.BuildConfig
+import com.superglobalpeq.app.dsp.ShootoutProcessor
 import com.superglobalpeq.app.dsp.StereoPeqProcessor
 import com.superglobalpeq.app.model.ActiveDspConfig
 import com.superglobalpeq.app.model.AutonomousDevicePolicy
 import com.superglobalpeq.app.model.EqPreset
 import com.superglobalpeq.app.model.IndependentPeqPreset
+import com.superglobalpeq.app.model.ShootoutRoundConfig
 import com.superglobalpeq.app.model.mergeExcludedUids
 import com.superglobalpeq.app.model.resolveDeviceRoutingOutcome
 import org.json.JSONArray
@@ -34,6 +38,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.lang.reflect.Method
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
@@ -119,6 +124,7 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
         private const val PLAYER_STATE_STARTED = 2
         private const val SIGNAL_SIGTERM = 15
         private const val SIGNAL_SIGKILL = 9
+        private const val SHOOTOUT_LOG_INTERVAL_METER_TICKS = 28 // about 5 s
     }
 
     private class FakeShellContext(base: Context) : ContextWrapper(base) {
@@ -144,6 +150,10 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
     }
 
     private val processor = StereoPeqProcessor(SAMPLE_RATE.toDouble())
+    private val shootoutProcessor = ShootoutProcessor(SAMPLE_RATE.toDouble())
+    private val shootoutLock = Any()
+    private var shootoutClientToken: IBinder? = null
+    private var shootoutDeathRecipient: IBinder.DeathRecipient? = null
     private val stateLock = Any()
     private val clientLock = Any()
     private val loopRunning = AtomicBoolean(false)
@@ -728,6 +738,7 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
             var winOutPeak = 0
             var winOutSumSq = 0.0
             var winSamples = 0L
+            var shootoutLogTicks = 0
 
             while (loopRunning.get()) {
                 val lowLatencyNow = isLowLatencyActive()
@@ -754,7 +765,11 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
                 }
 
                 // Always keep DSP biquad filter state continuous across every captured block.
-                processor.processInterleavedPcm16(buf, read)
+                if (shootoutProcessor.isEngaged) {
+                    shootoutProcessor.process(buf, read, processor)
+                } else {
+                    processor.processInterleavedPcm16(buf, read)
+                }
                 val blockFrames = (read / 2).toLong()
                 framesProcessed.addAndGet(blockFrames)
 
@@ -805,6 +820,10 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
                     winOutSumSq = 0.0
                     winSamples = 0L
                     lastMeterNs = now
+                    if (shootoutProcessor.isEngaged && ++shootoutLogTicks >= SHOOTOUT_LOG_INTERVAL_METER_TICKS) {
+                        shootoutLogTicks = 0
+                        Log.d(TAG, "Shootout round=${shootoutProcessor.currentRoundId} matchErrorDb=${shootoutProcessor.matchErrorDb}")
+                    }
                     if (lowLatencyUidSet.isNotEmpty() || perAppLowLatencyActive) {
                         refreshPerAppLowLatencyFromManager()
                     }
@@ -887,6 +906,8 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
         } catch (_: Throwable) {
         }
         workerThread = null
+        shootoutProcessor.reset()
+        clearShootoutClient()
 
         audioPolicyObj?.let { policy ->
             try {
@@ -907,6 +928,91 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
             }
         }
         audioPolicyObj = null
+    }
+
+    override fun startShootoutRound(clientToken: IBinder?, roundConfigJson: String): Boolean {
+        if (clientToken == null || destroying.get() || !loopRunning.get()) return false
+        val config = try {
+            ShootoutRoundConfig.fromJsonString(roundConfigJson)
+        } catch (t: Throwable) {
+            Log.e(TAG, "Invalid Shootout round", t)
+            return false
+        }
+        synchronized(shootoutLock) {
+            if (shootoutClientToken !== clientToken) {
+                clearShootoutClient()
+                // Unlike the normal EQ, a blind comparison never outlives the app that runs it.
+                val recipient = IBinder.DeathRecipient {
+                    Log.i(TAG, "Shootout client died; returning to the normal EQ")
+                    shootoutProcessor.requestStop()
+                    synchronized(shootoutLock) {
+                        shootoutClientToken = null
+                        shootoutDeathRecipient = null
+                    }
+                }
+                try {
+                    clientToken.linkToDeath(recipient, 0)
+                } catch (t: Throwable) {
+                    Log.w(TAG, "Shootout client already dead", t)
+                    return false
+                }
+                shootoutClientToken = clientToken
+                shootoutDeathRecipient = recipient
+            }
+        }
+        shootoutProcessor.startRound(config)
+        Log.i(TAG, "Shootout round ${config.roundId} queued")
+        return true
+    }
+
+    override fun selectShootoutSide(side: Int) {
+        shootoutProcessor.selectSide(side)
+    }
+
+    override fun stopShootout() {
+        stopShootoutEngine()
+    }
+
+    private fun stopShootoutEngine() {
+        if (shootoutProcessor.isEngaged) {
+            shootoutProcessor.requestStop()
+            Log.i(TAG, "Shootout stopping; returning to the normal EQ")
+        }
+        clearShootoutClient()
+    }
+
+    private fun clearShootoutClient() {
+        synchronized(shootoutLock) {
+            val token = shootoutClientToken
+            val recipient = shootoutDeathRecipient
+            shootoutClientToken = null
+            shootoutDeathRecipient = null
+            if (token != null && recipient != null) {
+                runCatching { token.unlinkToDeath(recipient, 0) }
+            }
+        }
+    }
+
+    override fun allowOverlayForClient(): Boolean {
+        if (savedClientAppUid > 0 && Binder.getCallingUid() != savedClientAppUid) return false
+        return try {
+            val process = ProcessBuilder(
+                "appops",
+                "set",
+                BuildConfig.APPLICATION_ID,
+                "SYSTEM_ALERT_WINDOW",
+                "allow"
+            ).redirectErrorStream(true).start()
+            if (!process.waitFor(3, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                false
+            } else {
+                process.exitValue() == 0
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "Unable to allow the overlay through appops", t)
+            false
+        }
     }
 
     override fun updateAutoDevicePolicy(policyJson: String) {
@@ -1027,6 +1133,7 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
             }.activeDevice ?: return
             val currentKey = activeSnapshot.deviceKey
             if (currentKey == autonomousLastDeviceKey) return
+            stopShootoutEngine()
 
             val outcome = resolveDeviceRoutingOutcome(
                 deviceKey = currentKey,
@@ -1110,6 +1217,9 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
             put("hasDraftIndependent", autonomousCurrentDraftIndep != null)
             put("channelSwap", autonomousCurrentSwap)
             put("pausedByDeviceRule", autonomousPausedByRule)
+            put("shootoutEngaged", shootoutProcessor.isEngaged)
+            put("shootoutRoundId", shootoutProcessor.currentRoundId)
+            put("shootoutMatchErrorDb", shootoutProcessor.matchErrorDb)
             put("error", lastError ?: JSONObject.NULL)
         }.toString()
     }

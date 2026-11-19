@@ -441,22 +441,22 @@ class StereoPeqProcessor(private val sampleRate: Double = 48000.0) {
         statesValid = true
     }
 
-    private fun quantizeSoftLimited(sample: Double): Short {
-        if (!sample.isFinite()) return 0
-        val out = if (sample > 0.96 || sample < -0.96) {
-            val excess = (kotlin.math.abs(sample) - 0.96) * 25.0
-            val limited = 0.96 + 0.0399 * tanh(excess)
-            if (sample >= 0.0) limited else -limited
-        } else {
-            sample
-        }
-        val scaled = (out * 32767.0).roundToInt()
-        return min(32767, max(-32767, scaled)).toShort()
-    }
-
     companion object {
         private const val INV_32768 = 1.0 / 32768.0
 
         private fun dbToLinear(db: Double): Double = 10.0.pow(db / 20.0)
     }
+}
+
+internal fun quantizeSoftLimited(sample: Double): Short {
+    if (!sample.isFinite()) return 0
+    val out = if (sample > 0.96 || sample < -0.96) {
+        val excess = (kotlin.math.abs(sample) - 0.96) * 25.0
+        val limited = 0.96 + 0.0399 * tanh(excess)
+        if (sample >= 0.0) limited else -limited
+    } else {
+        sample
+    }
+    val scaled = (out * 32767.0).roundToInt()
+    return min(32767, max(-32767, scaled)).toShort()
 }

@@ -36,6 +36,14 @@ Licensed under the **GNU General Public License v3.0 (GPL-3.0)** — see [LICENS
 - **Per-App Bypass (`excludeMixRule`)**  
   Pick specific installed apps (with search and `Standard Apps` / `All (+System)` filter) whose UIDs are excluded from `AudioPolicy` capture so they play cleanly through Android's standard audio path with zero DSP or added latency.
 
+### EQ Shootout
+- **Blind A/B Comparison on Any Playing App**  
+  Compare 2 to 8 Common EQ presets, all using one chosen L/R EQ and a Shootout-only channel swap setting, while music keeps playing in another app. A/B assignments are randomized every round, switches are click-free crossfades, and loudness is continuously matched from the music itself.
+- **Tab, Overlay & Notification Controls**  
+  Vote in the Shootout tab, on a Material 3 Expressive panel over the playing app, or from the notification when overlays are not allowed.
+- **Glicko-2 Results**  
+  Finished sessions show ratings, rating history, win rates, and a head-to-head league table. Sessions stop with the screen or the app and return audio to your normal EQ.
+
 ### UI & Customization
 - **Material 3 Expressive & Liquid Glass UI**  
   Features animated Liquid Glass navigation bar & bottom sheets, real-time refraction/blur/clarity controls, customizable pill motion & haptic feedback, **14 color palettes** (6 Quve Expressive palettes + 8 RootlessJamesDSP-inspired palettes), Light/Dark/System themes, and **AMOLED Pure Black** mode.

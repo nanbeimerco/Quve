@@ -49,6 +49,8 @@ import com.superglobalpeq.app.model.SwapPosition
 import com.superglobalpeq.app.model.composeEffectivePreset
 import com.superglobalpeq.app.model.evaluateSavedPresetSelection
 import com.superglobalpeq.app.model.resolveDeviceRoutingOutcome
+import com.superglobalpeq.app.tile.QuveTileRegistry
+import com.superglobalpeq.app.tile.QuveTileSync
 import kotlin.math.abs
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -192,7 +194,7 @@ internal fun shouldRestartLoopback(
 object PeqEngineManager {
     private const val TAG = "PeqEngineManager"
     private const val SHIZUKU_REQ_CODE = 2001
-    private const val USER_SERVICE_PROTOCOL_VERSION = 7
+    private const val USER_SERVICE_PROTOCOL_VERSION = 8
     private const val SHELL_PACKAGE = "com.android.shell"
     private const val DRAFT_INDEPENDENT_ID = "__draft_lr__"
 
@@ -249,6 +251,7 @@ object PeqEngineManager {
     }
 
     private val binderDeadListener = Shizuku.OnBinderDeadListener {
+        ShootoutManager.onEngineUnavailable()
         remoteService = null
         activeConnection?.let { it.cancelled = true }
         activeConnection = null
@@ -318,6 +321,7 @@ object PeqEngineManager {
             bindWatchdogJob?.cancel()
             bindWatchdogJob = null
             remoteService = null
+            ShootoutManager.onEngineUnavailable()
             Log.w(TAG, "Shizuku UserService disconnected (daemon=$daemonMode)")
             _uiState.update {
                 it.copy(
@@ -407,6 +411,8 @@ object PeqEngineManager {
                 onOutputDevicesUpdated(devState)
             }
         }
+        ShootoutManager.initialize(appContext)
+        QuveTileSync.start(appContext)
     }
 
     private val packageChangeReceiver = object : BroadcastReceiver() {
@@ -425,10 +431,20 @@ object PeqEngineManager {
     }
 
     fun refreshShizukuStatus() {
-        val status = when {
-            !Shizuku.pingBinder() -> ShizukuStatus.NOT_RUNNING
-            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED -> ShizukuStatus.READY
-            else -> ShizukuStatus.PERMISSION_REQUIRED
+        val status = try {
+            when {
+                !Shizuku.pingBinder() -> ShizukuStatus.NOT_RUNNING
+                Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED -> ShizukuStatus.READY
+                else -> ShizukuStatus.PERMISSION_REQUIRED
+            }
+        } catch (t: IllegalStateException) {
+            // Right after an app update Shizuku can answer before this process is attached.
+            Log.i(TAG, "Shizuku client is not attached yet; retrying", t)
+            scope.launch {
+                delay(500L)
+                refreshShizukuStatus()
+            }
+            return
         }
         _uiState.update { it.copy(shizukuStatus = status) }
         if (status == ShizukuStatus.READY && remoteService == null && !bindingInProgress && !rebindInProgress.get()) {
@@ -499,6 +515,8 @@ object PeqEngineManager {
             pendingForceRestartAfterBind = true
         }
         _uiState.update { it.copy(masterPowerOn = enabled, statusBanner = null) }
+        // After the power state changes, so stopping Shootout cannot restart the foreground service.
+        if (!enabled) ShootoutManager.onEngineUnavailable()
         evaluateActiveDeviceRuleAndApply(forceRestart = true)
     }
 
@@ -645,6 +663,7 @@ object PeqEngineManager {
     private fun handleRemoteServiceError(t: Throwable, failedSvc: IAudioLoopbackService) {
         if (t !is DeadObjectException && t !is RemoteException) return
         Log.w(TAG, "Remote UserService binder error; resetting binding", t)
+        scope.launch(Dispatchers.Main.immediate) { ShootoutManager.onEngineUnavailable() }
         if (remoteService === failedSvc) {
             remoteService = null
             activeConnection?.let { it.cancelled = true }
@@ -699,6 +718,7 @@ object PeqEngineManager {
 
         val activeDev = devState.activeDevice
         val deviceSwitched = activeDev?.deviceKey != _uiState.value.activeDevice?.deviceKey
+        if (deviceSwitched) ShootoutManager.onOutputDeviceChanged(activeDev?.deviceKey)
         _uiState.update {
             it.copy(
                 connectedDevices = devState.connectedDevices,
@@ -857,6 +877,10 @@ object PeqEngineManager {
 
     private fun buildForegroundNotificationPair(state: AppUiState): Pair<String, String>? {
         if (!state.masterPowerOn) return null
+        ShootoutManager.state.value.running?.let { running ->
+            return localizedStr(R.string.shootout_notif_title, running.round) to
+                localizedStr(R.string.shootout_notif_text)
+        }
         if (state.pausedByDeviceRule) {
             val deviceLabel = state.activeDevice?.displayName
                 ?: localizedStr(R.string.connected_device_label)
@@ -896,6 +920,36 @@ object PeqEngineManager {
             title = content.first,
             text = content.second
         )
+    }
+
+    internal fun refreshForegroundNotification() {
+        updateForegroundRunningNotification()
+    }
+
+    /** Runs [block] on the engine IPC thread; the callbacks are delivered on the main thread. */
+    internal fun runShootoutEngineCall(
+        onFailure: () -> Unit = {},
+        onSuccess: () -> Unit = {},
+        block: (IAudioLoopbackService) -> Unit
+    ) {
+        scope.launch(ipcDispatcher) {
+            val svc = remoteService
+            val succeeded = if (svc == null) {
+                false
+            } else {
+                try {
+                    block(svc)
+                    true
+                } catch (t: Throwable) {
+                    Log.w(TAG, "Shootout engine call failed", t)
+                    handleRemoteServiceError(t, svc)
+                    false
+                }
+            }
+            withContext(Dispatchers.Main.immediate) {
+                if (succeeded) onSuccess() else onFailure()
+            }
+        }
     }
 
     private fun syncEngineWithState(restartLoopback: Boolean) {
@@ -1110,6 +1164,9 @@ object PeqEngineManager {
                         lowLatencyUids,
                         config.toJsonString()
                     )
+                    withContext(Dispatchers.Main.immediate) {
+                        ShootoutManager.onLoopbackRestarted()
+                    }
                 } else {
                     svc.updateDspConfig(config.toJsonString())
                     svc.updateLatencyPolicy(state.globalLowLatency, lowLatencyUids)
@@ -1118,6 +1175,9 @@ object PeqEngineManager {
             } else {
                 pendingStartAfterBind = false
                 pendingForceRestartAfterBind = false
+                withContext(Dispatchers.Main.immediate) {
+                    ShootoutManager.onEngineUnavailable()
+                }
                 svc.stopLoopback()
                 _uiState.update {
                     it.copy(
@@ -1170,6 +1230,7 @@ object PeqEngineManager {
         if (state.masterPowerOn) {
             syncEngineWithState(restartLoopback = false)
         }
+        QuveTileRegistry.requestAllListeningStates(appContext)
     }
 
     suspend fun loadBypassCandidateApps(): List<AppBypassCandidate> = withContext(Dispatchers.IO) {

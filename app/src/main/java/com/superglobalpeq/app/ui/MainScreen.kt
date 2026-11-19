@@ -82,6 +82,7 @@ import com.superglobalpeq.app.model.PeqChannelTarget
 import com.superglobalpeq.app.service.AppUiState
 import com.superglobalpeq.app.service.PeqEngineManager
 import com.superglobalpeq.app.service.ShizukuStatus
+import com.superglobalpeq.app.service.ShootoutManager
 import com.superglobalpeq.app.ui.components.AppRoutingPickerSheet
 import com.superglobalpeq.app.ui.components.AppearanceSettingsSheet
 import com.superglobalpeq.app.ui.components.BottomFadeScrim
@@ -115,6 +116,7 @@ import com.superglobalpeq.app.ui.components.floatingtabbar.FloatingTabBarInlineB
 import com.superglobalpeq.app.ui.components.floatingtabbar.rememberFloatingTabBarScrollConnection
 import com.superglobalpeq.app.ui.components.isGlassSupported
 import com.superglobalpeq.app.ui.icons.LucideIcons
+import com.superglobalpeq.app.ui.shootout.ShootoutTab
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -124,8 +126,13 @@ private data class PasteDialogState(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    requestedTab: QuveTab? = null,
+    onConsumeRequestedTab: () -> Unit = {},
+) {
     val uiState by PeqEngineManager.uiState.collectAsState()
+    val shootoutState by ShootoutManager.state.collectAsState()
+    val openShootoutTab by ShootoutManager.openTabRequests.collectAsState()
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var currentTab by rememberSaveable { mutableStateOf(QuveTab.PEQ) }
@@ -177,6 +184,21 @@ fun MainScreen() {
     val peqScrollState = rememberScrollState()
     val presetsScrollState = rememberScrollState()
     val routingScrollState = rememberScrollState()
+    val shootoutScrollState = rememberScrollState()
+
+    LaunchedEffect(openShootoutTab) {
+        if (openShootoutTab) {
+            currentTab = QuveTab.SHOOTOUT
+            ShootoutManager.consumeOpenTabRequest()
+        }
+    }
+
+    LaunchedEffect(requestedTab) {
+        if (requestedTab != null) {
+            currentTab = requestedTab
+            onConsumeRequestedTab()
+        }
+    }
 
     LaunchedEffect(lockExpanded) {
         if (lockExpanded) scrollConnection.expand()
@@ -252,6 +274,7 @@ fun MainScreen() {
                         QuveTab.PEQ -> peqScrollState
                         QuveTab.PRESETS -> presetsScrollState
                         QuveTab.ROUTING -> routingScrollState
+                        QuveTab.SHOOTOUT -> shootoutScrollState
                     }
                     Column(
                         modifier = Modifier
@@ -272,6 +295,7 @@ fun MainScreen() {
                             QuveTab.PEQ -> {
                                 EngineHeroCard(
                                     uiState = uiState,
+                                    shootoutRunning = shootoutState.running != null,
                                     onToggleMaster = { PeqEngineManager.setMasterPower(!uiState.masterPowerOn) },
                                     onRefreshShizuku = { PeqEngineManager.refreshShizukuStatus() }
                                 )
@@ -394,7 +418,13 @@ fun MainScreen() {
                                 appRules = uiState.appRules,
                                 onOpenAppRulePicker = { showBypassPickerSheet = true },
                                 onChangeAppMode = { pkg, mode -> PeqEngineManager.setAppAudioMode(pkg, mode) },
-                                onResetAppRules = { PeqEngineManager.clearAppAudioModes() }
+                                onResetAppRules = { PeqEngineManager.clearAppAudioModes() },
+                                onShowMessage = { msg -> coroutineScope.launch { snackbarHostState.showSnackbar(msg) } },
+                            )
+
+                            QuveTab.SHOOTOUT -> ShootoutTab(
+                                appState = uiState,
+                                shootoutState = shootoutState,
                             )
                         }
 
@@ -441,6 +471,7 @@ fun MainScreen() {
                             QuveTab.PEQ -> peqScrollState
                             QuveTab.PRESETS -> presetsScrollState
                             QuveTab.ROUTING -> routingScrollState
+                            QuveTab.SHOOTOUT -> shootoutScrollState
                         }
                         coroutineScope.launch { activeScroll.animateScrollTo(0) }
                     } else {
@@ -449,9 +480,12 @@ fun MainScreen() {
                 },
                 scrollConnection = scrollConnection,
                 uiState = uiState,
+                shootoutRound = shootoutState.running?.round,
                 onToggleMaster = { PeqEngineManager.setMasterPower(!uiState.masterPowerOn) },
                 onToggleChannelSwap = { PeqEngineManager.setChannelSwap(!uiState.channelSwap, uiState.swapPosition) },
-                onOpenQuickTarget = { currentTab = QuveTab.PEQ },
+                onOpenQuickTarget = {
+                    currentTab = if (shootoutState.running != null) QuveTab.SHOOTOUT else QuveTab.PEQ
+                },
                 onHeightChanged = { floatingBarsHeightPx = it },
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
@@ -546,6 +580,7 @@ fun MainScreen() {
 @Composable
 private fun EngineHeroCard(
     uiState: AppUiState,
+    shootoutRunning: Boolean,
     onToggleMaster: () -> Unit,
     onRefreshShizuku: () -> Unit
 ) {
@@ -641,7 +676,14 @@ private fun EngineHeroCard(
                 }
             }
 
-            if (activeRunning) {
+            if (shootoutRunning) {
+                // Output meters would reveal level differences during a blind comparison.
+                Text(
+                    text = stringResource(R.string.shootout_meters_hidden),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (activeRunning) {
                 val inLevel = ((uiState.telemetry.inPeakDbfs + 60.0) / 60.0).toFloat().coerceIn(0f, 1f)
                 val outLevel = ((uiState.telemetry.outPeakDbfs + 60.0) / 60.0).toFloat().coerceIn(0f, 1f)
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
