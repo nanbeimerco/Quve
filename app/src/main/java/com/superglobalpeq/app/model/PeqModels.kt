@@ -185,6 +185,7 @@ data class IndependentPeqPreset(
     val leftBands: List<PeqBand> = emptyList(),
     val rightPreampDb: Double = 0.0,
     val rightBands: List<PeqBand> = emptyList(),
+    val channelSwap: Boolean = false,
     val updatedAtEpochMs: Long = System.currentTimeMillis(),
     val baseline: IndependentPeqBaseline? = null
 ) {
@@ -252,6 +253,7 @@ data class IndependentPeqPreset(
         put("leftBands", bandsToJson(leftBands))
         put("rightPreampDb", rightPreampDb)
         put("rightBands", bandsToJson(rightBands))
+        put("channelSwap", channelSwap)
         put("updatedAtEpochMs", updatedAtEpochMs)
         if (baseline != null) {
             put("baseline", baseline.toJson())
@@ -261,6 +263,11 @@ data class IndependentPeqPreset(
     companion object {
         fun fromJson(obj: JSONObject): IndependentPeqPreset {
             val baseline = obj.optJSONObject("baseline")?.let { IndependentPeqBaseline.fromJson(it) }
+            val swap = if (obj.has("channelSwap")) {
+                obj.optBoolean("channelSwap", false)
+            } else {
+                obj.optString("channelSwapMode") == "FORCE_ON"
+            }
             return IndependentPeqPreset(
                 id = obj.optString("id", UUID.randomUUID().toString()),
                 name = obj.optString("name", "L/R"),
@@ -268,6 +275,7 @@ data class IndependentPeqPreset(
                 leftBands = parseBandsJson(obj, "leftBands"),
                 rightPreampDb = obj.optDouble("rightPreampDb", 0.0),
                 rightBands = parseBandsJson(obj, "rightBands"),
+                channelSwap = swap,
                 updatedAtEpochMs = obj.optLong("updatedAtEpochMs", System.currentTimeMillis()),
                 baseline = baseline
             )
@@ -748,13 +756,7 @@ fun resolveDeviceRoutingOutcome(
     var clearedDraft = false
 
     if (rule != null) {
-        if (rule.action != DeviceRuleAction.EQ_OFF) {
-            nextSwap = when (rule.channelSwapAction) {
-                DeviceSwapRuleAction.FOLLOW_MANUAL -> currentChannelSwap
-                DeviceSwapRuleAction.FORCE_OFF -> false
-                DeviceSwapRuleAction.FORCE_ON -> true
-            }
-        }
+        var appliedIndepSwap: Boolean? = null
 
         when (rule.action) {
             DeviceRuleAction.FOLLOW_MANUAL -> {
@@ -774,18 +776,29 @@ fun resolveDeviceRoutingOutcome(
                     DeviceIndependentRuleAction.KEEP_CURRENT -> Unit
                     DeviceIndependentRuleAction.CLEAR_NONE -> {
                         nextIndepId = null
+                        appliedIndepSwap = false
                         if (nextDraftIndep != null) clearedDraft = true
                         nextDraftIndep = null
                     }
                     DeviceIndependentRuleAction.APPLY_PRESET -> {
                         val targetId = rule.independentPresetId
-                        if (targetId != null && independentPresets.any { it.id == targetId }) {
-                            nextIndepId = targetId
+                        val targetIndep = targetId?.let { id -> independentPresets.firstOrNull { it.id == id } }
+                        if (targetIndep != null) {
+                            nextIndepId = targetIndep.id
+                            appliedIndepSwap = targetIndep.channelSwap
                             if (nextDraftIndep != null) clearedDraft = true
                             nextDraftIndep = null
                         }
                     }
                 }
+            }
+        }
+
+        if (rule.action != DeviceRuleAction.EQ_OFF) {
+            nextSwap = when (rule.channelSwapAction) {
+                DeviceSwapRuleAction.FOLLOW_MANUAL -> appliedIndepSwap ?: currentChannelSwap
+                DeviceSwapRuleAction.FORCE_OFF -> false
+                DeviceSwapRuleAction.FORCE_ON -> true
             }
         }
     }

@@ -913,6 +913,130 @@ class BiquadAndApoTest {
         assertEquals(original, restored)
     }
 
+    @Test
+    fun independentPresetChannelSwapRoundTripAndMigration() {
+        val swapOn = IndependentPeqPreset(id = "lr_on", name = "LR On", channelSwap = true)
+        val swapOff = IndependentPeqPreset(id = "lr_off", name = "LR Off", channelSwap = false)
+        assertTrue(IndependentPeqPreset.fromJson(swapOn.toJson()).channelSwap)
+        assertFalse(IndependentPeqPreset.fromJson(swapOff.toJson()).channelSwap)
+
+        // Legacy JSON without channelSwap defaults to false
+        val legacyJson = IndependentPeqPreset(id = "legacy", name = "Legacy").toJson().apply {
+            remove("channelSwap")
+        }
+        assertFalse(IndependentPeqPreset.fromJson(legacyJson).channelSwap)
+
+        // Migration from v1.7.0 channelSwapMode == "FORCE_ON"
+        val v170OnJson = IndependentPeqPreset(id = "v170_on", name = "V170 On").toJson().apply {
+            remove("channelSwap")
+            put("channelSwapMode", "FORCE_ON")
+        }
+        assertTrue(IndependentPeqPreset.fromJson(v170OnJson).channelSwap)
+    }
+
+    @Test
+    fun deviceRoutingAppliesIndependentPresetSwapWithDeviceRulePrecedence() {
+        val common = EqPreset(id = "c1", name = "Common")
+        val lrSwapOn = IndependentPeqPreset(id = "lr_on", name = "LR On", channelSwap = true)
+        val lrSwapOff = IndependentPeqPreset(id = "lr_off", name = "LR Off", channelSwap = false)
+        val indepList = listOf(lrSwapOn, lrSwapOff)
+
+        // Device rule FOLLOW_MANUAL + APPLY_PRESET(channelSwap = true) -> turns swap ON
+        val followRule = DeviceRoutingRule(
+            deviceKey = "usb:1",
+            displayName = "DAC 1",
+            category = DeviceCategory.USB_DAC,
+            action = DeviceRuleAction.PRESET,
+            presetId = "c1",
+            independentAction = DeviceIndependentRuleAction.APPLY_PRESET,
+            independentPresetId = "lr_on",
+            channelSwapAction = DeviceSwapRuleAction.FOLLOW_MANUAL
+        )
+        val outcomeOn = resolveDeviceRoutingOutcome(
+            deviceKey = "usb:1",
+            deviceRules = listOf(followRule),
+            presets = listOf(common),
+            independentPresets = indepList,
+            currentCommonPresetId = "c1",
+            currentIndependentPresetId = null,
+            draftIndependentPreset = null,
+            currentChannelSwap = false,
+            swapPosition = SwapPosition.BEFORE_INDEPENDENT_EQ
+        )
+        assertTrue(outcomeOn.channelSwap)
+        assertTrue(outcomeOn.channelSwapChanged)
+
+        // Device rule FOLLOW_MANUAL + APPLY_PRESET(channelSwap = false) -> resets swap back to OFF
+        val offPresetRule = followRule.copy(independentPresetId = "lr_off")
+        val outcomeOff = resolveDeviceRoutingOutcome(
+            deviceKey = "usb:1",
+            deviceRules = listOf(offPresetRule),
+            presets = listOf(common),
+            independentPresets = indepList,
+            currentCommonPresetId = "c1",
+            currentIndependentPresetId = "lr_on",
+            draftIndependentPreset = null,
+            currentChannelSwap = true,
+            swapPosition = SwapPosition.BEFORE_INDEPENDENT_EQ
+        )
+        assertFalse(outcomeOff.channelSwap)
+        assertTrue(outcomeOff.channelSwapChanged)
+
+        // Device rule FOLLOW_MANUAL + CLEAR_NONE -> resets swap back to OFF
+        val clearRule = followRule.copy(
+            independentAction = DeviceIndependentRuleAction.CLEAR_NONE,
+            independentPresetId = null
+        )
+        val outcomeClear = resolveDeviceRoutingOutcome(
+            deviceKey = "usb:1",
+            deviceRules = listOf(clearRule),
+            presets = listOf(common),
+            independentPresets = indepList,
+            currentCommonPresetId = "c1",
+            currentIndependentPresetId = "lr_on",
+            draftIndependentPreset = null,
+            currentChannelSwap = true,
+            swapPosition = SwapPosition.BEFORE_INDEPENDENT_EQ
+        )
+        assertFalse(outcomeClear.channelSwap)
+        assertTrue(outcomeClear.channelSwapChanged)
+
+        // Device rule FOLLOW_MANUAL + KEEP_CURRENT -> keeps current swap state
+        val keepRule = followRule.copy(
+            independentAction = DeviceIndependentRuleAction.KEEP_CURRENT,
+            independentPresetId = null
+        )
+        val outcomeKeep = resolveDeviceRoutingOutcome(
+            deviceKey = "usb:1",
+            deviceRules = listOf(keepRule),
+            presets = listOf(common),
+            independentPresets = indepList,
+            currentCommonPresetId = "c1",
+            currentIndependentPresetId = "lr_on",
+            draftIndependentPreset = null,
+            currentChannelSwap = true,
+            swapPosition = SwapPosition.BEFORE_INDEPENDENT_EQ
+        )
+        assertTrue(outcomeKeep.channelSwap)
+        assertFalse(outcomeKeep.channelSwapChanged)
+
+        // Device rule FORCE_OFF overrides independent preset channelSwap = true
+        val forceOffRule = followRule.copy(channelSwapAction = DeviceSwapRuleAction.FORCE_OFF)
+        val outcomeOverride = resolveDeviceRoutingOutcome(
+            deviceKey = "usb:1",
+            deviceRules = listOf(forceOffRule),
+            presets = listOf(common),
+            independentPresets = indepList,
+            currentCommonPresetId = "c1",
+            currentIndependentPresetId = null,
+            draftIndependentPreset = null,
+            currentChannelSwap = true,
+            swapPosition = SwapPosition.BEFORE_INDEPENDENT_EQ
+        )
+        assertFalse(outcomeOverride.channelSwap)
+        assertTrue(outcomeOverride.channelSwapChanged)
+    }
+
     private fun createSampleDualChannelPreset(): EqPreset =
         EqualizerApoParser.parse(SAMPLE_DUAL_CHANNEL_APO, "Dual Channel Test").preset
 

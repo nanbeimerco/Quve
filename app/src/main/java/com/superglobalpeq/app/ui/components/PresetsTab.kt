@@ -69,8 +69,9 @@ fun PresetsTab(
     onDeletePreset: (String) -> Unit,
     onSelectIndependentPreset: (String?) -> Unit,
     onRevertIndependentPreset: (String) -> Unit,
-    onSaveIndependentAsNew: (newName: String, sourceIndependentId: String?, revertSourceToOriginal: Boolean) -> Unit,
+    onSaveIndependentAsNew: (newName: String, sourceIndependentId: String?, revertSourceToOriginal: Boolean, channelSwap: Boolean) -> Unit,
     onDiscardDraftIndependent: () -> Unit,
+    onSetIndependentChannelSwap: (String, Boolean) -> Unit,
     onRenameIndependentPreset: (String, String) -> Unit,
     onDuplicateIndependentPreset: (String) -> Unit,
     onDeleteIndependentPreset: (String) -> Unit,
@@ -589,6 +590,15 @@ fun PresetsTab(
                                             )
                                         )
                                     }
+                                    if (indep.channelSwap) {
+                                        add(
+                                            PresetBadgeSpec(
+                                                text = stringResource(R.string.badge_lr_swap_on),
+                                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                            )
+                                        )
+                                    }
                                 }
                                 PresetBadgeFlowRow(badges = lrBadges)
                                 Text(
@@ -628,6 +638,20 @@ fun PresetsTab(
                                             }
                                         )
                                     }
+                                    GlassMenuItem(
+                                        text = stringResource(
+                                            if (indep.channelSwap) {
+                                                R.string.action_lr_channel_swap_turn_off
+                                            } else {
+                                                R.string.action_lr_channel_swap_turn_on
+                                            }
+                                        ),
+                                        icon = LucideIcons.ArrowLeftRight,
+                                        onClick = {
+                                            menuExpanded = false
+                                            onSetIndependentChannelSwap(indep.id, !indep.channelSwap)
+                                        }
+                                    )
                                     GlassMenuItem(
                                         text = stringResource(R.string.action_save_as_new),
                                         icon = LucideIcons.Save,
@@ -761,11 +785,12 @@ fun PresetsTab(
             sourcePreset = source,
             isDraft = saveIndepFromDraft,
             onDismiss = { saveIndepAsTarget = null },
-            onConfirm = { newName, revertSource ->
+            onConfirm = { newName, revertSource, channelSwap ->
                 onSaveIndependentAsNew(
                     newName,
                     if (saveIndepFromDraft) null else source.id,
-                    revertSource
+                    revertSource,
+                    channelSwap
                 )
                 saveIndepAsTarget = null
             }
@@ -1109,7 +1134,7 @@ fun SaveAsNewIndependentPresetDialog(
     sourcePreset: IndependentPeqPreset,
     isDraft: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (newName: String, revertSourceToOriginal: Boolean) -> Unit
+    onConfirm: (newName: String, revertSourceToOriginal: Boolean, channelSwap: Boolean) -> Unit
 ) {
     val customSuffix = stringResource(R.string.default_custom_suffix)
     var name by remember(sourcePreset.id, isDraft) {
@@ -1118,6 +1143,7 @@ fun SaveAsNewIndependentPresetDialog(
         )
     }
     var revertOriginal by remember(sourcePreset.id) { mutableStateOf(false) }
+    var channelSwap by remember(sourcePreset.id, isDraft) { mutableStateOf(sourcePreset.channelSwap) }
 
     val trimmed = name.trim()
     val sameAsSource = !isDraft && trimmed.equals(sourcePreset.name, ignoreCase = true)
@@ -1149,6 +1175,25 @@ fun SaveAsNewIndependentPresetDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { channelSwap = !channelSwap }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.lr_swap_switch_label),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuveExpressiveSwitch(
+                        checked = channelSwap,
+                        onCheckedChange = { channelSwap = it }
+                    )
+                }
                 if (!isDraft && sourcePreset.isModifiedFromBaseline) {
                     Row(
                         modifier = Modifier
@@ -1174,7 +1219,7 @@ fun SaveAsNewIndependentPresetDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(trimmed, revertOriginal) },
+                onClick = { onConfirm(trimmed, revertOriginal, channelSwap) },
                 enabled = trimmed.isNotEmpty() && !sameAsSource,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = expressiveColors.primary,

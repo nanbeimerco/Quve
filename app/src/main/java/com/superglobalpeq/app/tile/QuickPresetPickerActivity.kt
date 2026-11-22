@@ -657,16 +657,28 @@ private fun IndependentPresetsQuickList(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        if (indep.isModifiedFromBaseline) {
-                            PresetBadgeFlowRow(
-                                badges = listOf(
+                        val lrQuickBadges = buildList {
+                            if (indep.isModifiedFromBaseline) {
+                                add(
                                     PresetBadgeSpec(
                                         text = "(${stringResource(R.string.preset_edited_badge)})",
                                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                                     )
                                 )
-                            )
+                            }
+                            if (indep.channelSwap) {
+                                add(
+                                    PresetBadgeSpec(
+                                        text = stringResource(R.string.badge_lr_swap_on),
+                                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    )
+                                )
+                            }
+                        }
+                        if (lrQuickBadges.isNotEmpty()) {
+                            PresetBadgeFlowRow(badges = lrQuickBadges)
                         }
                         Text(
                             text = stringResource(

@@ -11,8 +11,8 @@ android {
         applicationId = "com.superglobalpeq.app"
         minSdk = 33
         targetSdk = 37
-        versionCode = 12
-        versionName = "1.6.0"
+        versionCode = 14
+        versionName = "1.7.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

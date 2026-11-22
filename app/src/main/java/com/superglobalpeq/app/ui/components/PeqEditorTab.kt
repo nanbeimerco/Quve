@@ -85,7 +85,7 @@ fun PeqEditorTab(
     onRevertCommonToOriginal: () -> Unit,
     onSaveCommonAsNew: (newName: String, revertSourceToOriginal: Boolean, includeActiveLr: Boolean) -> Unit,
     onRevertIndependentToOriginal: () -> Unit,
-    onSaveIndependentAsNew: (newName: String, revertSourceToOriginal: Boolean) -> Unit,
+    onSaveIndependentAsNew: (newName: String, revertSourceToOriginal: Boolean, channelSwap: Boolean) -> Unit,
     onDiscardDraftIndependent: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -367,8 +367,8 @@ fun PeqEditorTab(
                 sourcePreset = sourceIndep,
                 isDraft = activeSavedIndependent == null,
                 onDismiss = { showSaveIndepAsDialog = false },
-                onConfirm = { newName, revertSource ->
-                    onSaveIndependentAsNew(newName, revertSource)
+                onConfirm = { newName, revertSource, swapMode ->
+                    onSaveIndependentAsNew(newName, revertSource, swapMode)
                     showSaveIndepAsDialog = false
                 }
             )

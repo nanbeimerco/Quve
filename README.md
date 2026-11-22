@@ -59,6 +59,8 @@ Verified working on the following devices:
 - **Xiaomi Pad 6** (Android 14 / HyperOS)
 - **Samsung Galaxy S21**
 
+> **Note:** Issues have been reported on some **MediaTek SoC** devices where system-wide audio capture / EQ may not work properly.
+
 ---
 
 ## Requirements

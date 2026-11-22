@@ -455,4 +455,9 @@
     <string name="qs_msg_added">「%1$s」をコントロールセンターに追加しました</string>
     <string name="qs_msg_already_added">「%1$s」はすでにコントロールセンターに追加されています</string>
     <string name="qs_msg_manual_hint">端末のコントロールセンター編集画面から「%1$s」を追加してください</string>
+
+    <string name="action_lr_channel_swap_turn_on">チャンネルスワップを ON</string>
+    <string name="action_lr_channel_swap_turn_off">チャンネルスワップを OFF</string>
+    <string name="lr_swap_switch_label">選択時に L⇄R チャンネルスワップを ON</string>
+    <string name="badge_lr_swap_on">L⇄R ON</string>
 </resources>

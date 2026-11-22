@@ -1448,10 +1448,14 @@ object PeqEngineManager {
         }
         val nextDraft = if (linkedIndep != null) null else state.draftIndependentPreset
         val effectiveIndep = if (linkedIndep != null) linkedIndep else state.activeIndependentPreset
+        val nextChannelSwap = linkedIndep?.channelSwap ?: state.channelSwap
+        if (nextChannelSwap != state.channelSwap) {
+            repo.saveChannelSwap(nextChannelSwap, state.swapPosition)
+        }
         val effectivePreset = composeEffectivePreset(
             commonPreset = commonPreset,
             independentPreset = effectiveIndep,
-            channelSwap = state.channelSwap,
+            channelSwap = nextChannelSwap,
             swapPosition = state.swapPosition
         )
         val curves = FrequencyResponseCalculator.calculate(effectivePreset)
@@ -1467,6 +1471,7 @@ object PeqEngineManager {
                 selectedPresetId = commonPreset.id,
                 selectedIndependentPresetId = nextIndepId,
                 draftIndependentPreset = nextDraft,
+                channelSwap = nextChannelSwap,
                 frequencyCurves = curves,
                 statusBanner = banner
             )
@@ -1485,10 +1490,15 @@ object PeqEngineManager {
         }
         repo.saveSelectedIndependentPresetId(indep?.id)
 
+        val nextChannelSwap = indep?.channelSwap ?: false
+        if (nextChannelSwap != state.channelSwap) {
+            repo.saveChannelSwap(nextChannelSwap, state.swapPosition)
+        }
+
         val effectivePreset = composeEffectivePreset(
             commonPreset = state.activeCommonPreset,
             independentPreset = indep,
-            channelSwap = state.channelSwap,
+            channelSwap = nextChannelSwap,
             swapPosition = state.swapPosition
         )
         val curves = FrequencyResponseCalculator.calculate(effectivePreset)
@@ -1502,6 +1512,7 @@ object PeqEngineManager {
             it.copy(
                 selectedIndependentPresetId = indep?.id,
                 draftIndependentPreset = null,
+                channelSwap = nextChannelSwap,
                 frequencyCurves = curves,
                 statusBanner = banner
             )
@@ -1918,7 +1929,8 @@ object PeqEngineManager {
     fun saveAsNewIndependentPreset(
         newName: String,
         sourceIndependentId: String? = _uiState.value.selectedIndependentPresetId,
-        revertSourceToBaseline: Boolean = false
+        revertSourceToBaseline: Boolean = false,
+        channelSwap: Boolean = false
     ) {
         val state = _uiState.value
         val source = sourceIndependentId?.let { id ->
@@ -1933,6 +1945,7 @@ object PeqEngineManager {
             leftBands = source?.leftBands?.map { it.copy() } ?: emptyList(),
             rightPreampDb = source?.rightPreampDb ?: 0.0,
             rightBands = source?.rightBands?.map { it.copy() } ?: emptyList(),
+            channelSwap = channelSwap,
             updatedAtEpochMs = System.currentTimeMillis()
         ).withCapturedBaseline()
 
@@ -1946,10 +1959,15 @@ object PeqEngineManager {
         repo.saveIndependentPresets(updated)
         repo.saveSelectedIndependentPresetId(newIndep.id)
 
+        val nextChannelSwap = channelSwap
+        if (nextChannelSwap != state.channelSwap) {
+            repo.saveChannelSwap(nextChannelSwap, state.swapPosition)
+        }
+
         val effectivePreset = composeEffectivePreset(
             commonPreset = state.activeCommonPreset,
             independentPreset = newIndep,
-            channelSwap = state.channelSwap,
+            channelSwap = nextChannelSwap,
             swapPosition = state.swapPosition
         )
         _uiState.update {
@@ -1957,12 +1975,54 @@ object PeqEngineManager {
                 independentPresets = updated,
                 selectedIndependentPresetId = newIndep.id,
                 draftIndependentPreset = null,
+                channelSwap = nextChannelSwap,
                 frequencyCurves = FrequencyResponseCalculator.calculate(effectivePreset),
                 statusBanner = localizedStr(R.string.banner_saved_new_lr_preset, trimmed)
             )
         }
         updateForegroundRunningNotification()
         pushLiveDspConfigOnly()
+    }
+
+    fun setIndependentPresetChannelSwap(independentId: String, enabled: Boolean) {
+        val state = _uiState.value
+        val target = state.independentPresets.firstOrNull { it.id == independentId } ?: return
+        val updatedIndep = target.copy(
+            channelSwap = enabled,
+            updatedAtEpochMs = System.currentTimeMillis()
+        )
+        val updatedList = state.independentPresets.map {
+            if (it.id == independentId) updatedIndep else it
+        }
+        repo.saveIndependentPresets(updatedList)
+
+        val isSelected = state.selectedIndependentPresetId == independentId && state.draftIndependentPreset == null
+        val nextChannelSwap = if (isSelected) enabled else state.channelSwap
+        val swapChanged = nextChannelSwap != state.channelSwap
+        if (swapChanged) {
+            repo.saveChannelSwap(nextChannelSwap, state.swapPosition)
+        }
+
+        if (swapChanged) {
+            val effectivePreset = composeEffectivePreset(
+                commonPreset = state.activeCommonPreset,
+                independentPreset = updatedIndep,
+                channelSwap = nextChannelSwap,
+                swapPosition = state.swapPosition
+            )
+            _uiState.update {
+                it.copy(
+                    independentPresets = updatedList,
+                    channelSwap = nextChannelSwap,
+                    frequencyCurves = FrequencyResponseCalculator.calculate(effectivePreset)
+                )
+            }
+            updateForegroundRunningNotification()
+            pushLiveDspConfigOnly()
+        } else {
+            _uiState.update { it.copy(independentPresets = updatedList) }
+            scheduleAutoDevicePolicySync()
+        }
     }
 
     fun renameIndependentPreset(independentId: String, newName: String) {

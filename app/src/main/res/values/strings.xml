@@ -455,4 +455,9 @@
     <string name="qs_msg_added">Added \"%1$s\" to Quick Settings</string>
     <string name="qs_msg_already_added">\"%1$s\" is already in Quick Settings</string>
     <string name="qs_msg_manual_hint">Open your device\'s Quick Settings editor to add \"%1$s\"</string>
+
+    <string name="action_lr_channel_swap_turn_on">Channel Swap: Turn ON</string>
+    <string name="action_lr_channel_swap_turn_off">Channel Swap: Turn OFF</string>
+    <string name="lr_swap_switch_label">Enable L⇄R channel swap when selected</string>
+    <string name="badge_lr_swap_on">L⇄R ON</string>
 </resources>

@@ -337,11 +337,12 @@ fun MainScreen(
                                     onRevertIndependentToOriginal = {
                                         PeqEngineManager.revertIndependentPresetToBaseline()
                                     },
-                                    onSaveIndependentAsNew = { newName, revertSource ->
+                                    onSaveIndependentAsNew = { newName, revertSource, channelSwap ->
                                         PeqEngineManager.saveAsNewIndependentPreset(
                                             newName = newName,
                                             sourceIndependentId = uiState.selectedIndependentPresetId,
-                                            revertSourceToBaseline = revertSource
+                                            revertSourceToBaseline = revertSource,
+                                            channelSwap = channelSwap
                                         )
                                     },
                                     onDiscardDraftIndependent = {
@@ -374,14 +375,18 @@ fun MainScreen(
                                 onDeletePreset = { PeqEngineManager.deletePreset(it) },
                                 onSelectIndependentPreset = { PeqEngineManager.selectIndependentPreset(it) },
                                 onRevertIndependentPreset = { PeqEngineManager.revertIndependentPresetToBaseline(it) },
-                                onSaveIndependentAsNew = { newName, sourceId, revertSource ->
+                                onSaveIndependentAsNew = { newName, sourceId, revertSource, channelSwap ->
                                     PeqEngineManager.saveAsNewIndependentPreset(
                                         newName = newName,
                                         sourceIndependentId = sourceId,
-                                        revertSourceToBaseline = revertSource
+                                        revertSourceToBaseline = revertSource,
+                                        channelSwap = channelSwap
                                     )
                                 },
                                 onDiscardDraftIndependent = { PeqEngineManager.discardDraftIndependent() },
+                                onSetIndependentChannelSwap = { id, enabled ->
+                                    PeqEngineManager.setIndependentPresetChannelSwap(id, enabled)
+                                },
                                 onRenameIndependentPreset = { id, name -> PeqEngineManager.renameIndependentPreset(id, name) },
                                 onDuplicateIndependentPreset = { PeqEngineManager.duplicateIndependentPreset(it) },
                                 onDeleteIndependentPreset = { PeqEngineManager.deleteIndependentPreset(it) },
