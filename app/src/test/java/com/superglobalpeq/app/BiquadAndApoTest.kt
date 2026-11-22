@@ -34,12 +34,14 @@ import com.superglobalpeq.app.model.sliderPosToPreampDb
 import com.superglobalpeq.app.ui.components.computeAdaptiveGraphYAxis
 import com.superglobalpeq.app.service.IAudioLoopbackService
 import com.superglobalpeq.app.service.LatencyQueueController
+import com.superglobalpeq.app.service.UsbAudioDescriptor
 import com.superglobalpeq.app.service.classifyOutputDeviceKeyAndCategory
 import com.superglobalpeq.app.service.extractProcCmdlineProcessName
 import com.superglobalpeq.app.service.isStaleSiblingPeqServiceProcess
 import com.superglobalpeq.app.service.normalizeUserExcludedUids
 import com.superglobalpeq.app.service.parseJsonIntArray
 import com.superglobalpeq.app.service.parseProcRealUid
+import com.superglobalpeq.app.service.resolveUsbAudioIdentity
 import com.superglobalpeq.app.service.shouldRestartLoopback
 import com.superglobalpeq.app.service.userServiceTagForPersistence
 import com.superglobalpeq.app.ui.components.GraphSeries
@@ -764,15 +766,119 @@ class BiquadAndApoTest {
             "bt:AA:BB:CC:DD:EE:FF" to DeviceCategory.BLUETOOTH,
             classifyOutputDeviceKeyAndCategory(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, "Sony", "AA:BB:CC:DD:EE:FF")
         )
+        // Without UsbManager descriptors, non-generic product name is preferred over volatile ALSA card address
         assertEquals(
-            "usb:card1" to DeviceCategory.USB_DAC,
-            classifyOutputDeviceKeyAndCategory(AudioDeviceInfo.TYPE_USB_DEVICE, "MOONDROP", "card1")
+            "usb:name:moondrop" to DeviceCategory.USB_DAC,
+            classifyOutputDeviceKeyAndCategory(
+                type = AudioDeviceInfo.TYPE_USB_DEVICE,
+                product = "USB-Audio - MOONDROP",
+                address = "card=1;device=0;",
+                procUsbIdResolver = { null },
+                procStreamLabelResolver = { null }
+            )
         )
         assertEquals(
             "wired:${AudioDeviceInfo.TYPE_WIRED_HEADPHONES}" to DeviceCategory.WIRED,
             classifyOutputDeviceKeyAndCategory(AudioDeviceInfo.TYPE_WIRED_HEADPHONES, "", "")
         )
         assertNull(classifyOutputDeviceKeyAndCategory(AudioDeviceInfo.TYPE_REMOTE_SUBMIX, "submix", ""))
+    }
+
+    @Test
+    fun resolveUsbAudioIdentityDistinguishesDifferentDacsEvenWithGenericAudioDeviceInfo() {
+        val appleDongle = UsbAudioDescriptor(
+            vendorId = 0x05ac,
+            productId = 0x110a,
+            manufacturerName = "Apple Inc.",
+            productName = "USB-C to 3.5mm Headphone Jack Adapter"
+        )
+        val fiioKa13 = UsbAudioDescriptor(
+            vendorId = 0x2972,
+            productId = 0x0047,
+            manufacturerName = "FiiO",
+            productName = "FiiO KA13"
+        )
+        val sameChipA = UsbAudioDescriptor(
+            vendorId = 0x3302,
+            productId = 0x1028,
+            manufacturerName = "Brand A",
+            productName = "Dongle Alpha"
+        )
+        val sameChipB = UsbAudioDescriptor(
+            vendorId = 0x3302,
+            productId = 0x1028,
+            manufacturerName = "Brand B",
+            productName = "Dongle Beta"
+        )
+
+        // Even when Android AudioDeviceInfo reports generic "USB-Audio" + same "card=1;device=0;"
+        val idApple = resolveUsbAudioIdentity(
+            audioProduct = "USB-Audio",
+            audioAddress = "card=1;device=0;",
+            usbDescriptors = listOf(appleDongle),
+            procUsbIdResolver = { null }
+        )
+        val idFiioCard1 = resolveUsbAudioIdentity(
+            audioProduct = "USB-Audio",
+            audioAddress = "card=1;device=0;",
+            usbDescriptors = listOf(fiioKa13),
+            procUsbIdResolver = { null }
+        )
+        val idFiioCard2 = resolveUsbAudioIdentity(
+            audioProduct = "USB-Audio",
+            audioAddress = "card=2;device=0;",
+            usbDescriptors = listOf(fiioKa13),
+            procUsbIdResolver = { null }
+        )
+
+        assertEquals("usb:05ac:110a:usb-c to 3.5mm headphone jack adapter", idApple.deviceKey)
+        assertEquals("Apple Inc. USB-C to 3.5mm Headphone Jack Adapter", idApple.displayName)
+        assertEquals("usb:2972:0047:fiio ka13", idFiioCard1.deviceKey)
+        assertEquals("FiiO KA13", idFiioCard1.displayName)
+        // Same DAC stays identical even if ALSA card slot number changes
+        assertEquals(idFiioCard1.deviceKey, idFiioCard2.deviceKey)
+
+        // Two DACs sharing the same bridge chip VID:PID still get distinct keys via product name
+        val idChipA = resolveUsbAudioIdentity(
+            audioProduct = "USB-Audio",
+            audioAddress = "card=1;device=0;",
+            usbDescriptors = listOf(sameChipA),
+            procUsbIdResolver = { null }
+        )
+        val idChipB = resolveUsbAudioIdentity(
+            audioProduct = "USB-Audio",
+            audioAddress = "card=1;device=0;",
+            usbDescriptors = listOf(sameChipB),
+            procUsbIdResolver = { null }
+        )
+        assertNotEquals(idChipA.deviceKey, idChipB.deviceKey)
+
+        // Multiple simultaneous USB DACs disambiguated via /proc/asound/cardN/usbid
+        val multiCard1 = resolveUsbAudioIdentity(
+            audioProduct = "USB-Audio",
+            audioAddress = "card=1;device=0;",
+            usbDescriptors = listOf(appleDongle, fiioKa13),
+            procUsbIdResolver = { card -> if (card == 1) "05ac:110a" else "2972:0047" }
+        )
+        val multiCard2 = resolveUsbAudioIdentity(
+            audioProduct = "USB-Audio",
+            audioAddress = "card=2;device=0;",
+            usbDescriptors = listOf(appleDongle, fiioKa13),
+            procUsbIdResolver = { card -> if (card == 1) "05ac:110a" else "2972:0047" }
+        )
+        assertEquals(idApple.deviceKey, multiCard1.deviceKey)
+        assertEquals(idFiioCard1.deviceKey, multiCard2.deviceKey)
+
+        // Fallback to /proc/asound when UsbManager returns empty list
+        val procFallback = resolveUsbAudioIdentity(
+            audioProduct = "USB-Audio",
+            audioAddress = "card=1;device=0;",
+            usbDescriptors = emptyList(),
+            procUsbIdResolver = { "2972:0047" },
+            procStreamLabelResolver = { "FiiO KA13" }
+        )
+        assertEquals("usb:2972:0047:fiio ka13", procFallback.deviceKey)
+        assertEquals("FiiO KA13", procFallback.displayName)
     }
 
     @Test

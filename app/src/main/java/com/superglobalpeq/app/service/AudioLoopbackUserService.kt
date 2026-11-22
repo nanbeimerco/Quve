@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.AttributionSource
 import android.content.Context
 import android.content.ContextWrapper
+import android.hardware.usb.UsbManager
 import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
@@ -170,6 +171,9 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
 
     @Volatile
     private var audioManager: AudioManager? = null
+
+    @Volatile
+    private var usbManager: UsbManager? = null
 
     @Volatile
     private var shellContext: Context? = null
@@ -379,6 +383,11 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
         val fake = FakeShellContext(pkgCtx)
         shellContext = fake
         audioManager = fake.getSystemService(AudioManager::class.java)
+        usbManager = try {
+            fake.getSystemService(UsbManager::class.java)
+        } catch (_: Throwable) {
+            null
+        }
         return fake
     }
 
@@ -1128,7 +1137,10 @@ class AudioLoopbackUserService : IAudioLoopbackService.Stub() {
             val policy = autonomousPolicy
             if (policy == null || !policy.enabled || destroying.get()) return
             val am = audioManager ?: return
-            val activeSnapshot = queryOutputDevicesState(am) { _, product, _, category ->
+            val activeSnapshot = queryOutputDevicesState(
+                audioManager = am,
+                usbManager = usbManager
+            ) { _, product, _, category ->
                 product.ifBlank { category.name }
             }.activeDevice ?: return
             val currentKey = activeSnapshot.deviceKey
